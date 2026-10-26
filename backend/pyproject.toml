@@ -1,0 +1,18 @@
+[project]
+name = "clinic-voice-agent"
+version = "1.0.0"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["e2e: real-browser tests (run with: pytest e2e)"]
+addopts = "-ra"
+filterwarnings = ["ignore::DeprecationWarning", "ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008", "E501"]

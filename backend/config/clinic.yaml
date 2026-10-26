@@ -1,0 +1,202 @@
+# Clinic rules for the voice assistant. The dialogue "brain" reads ONLY this file for
+# business rules, so changing hours, services or policy never needs a code change.
+#
+# Policy values are modelled on published outpatient policies, for example:
+#   - Brigham and Women's Hospital Urology, "Late Arrival / No-Show Policy"
+#     (new patients arrive 30 min early, established 15 min, 15 min grace period,
+#      24-hour cancellation notice, a reschedule inside 24h counts as a cancellation)
+#   - Rush University Medical Group, "Office Policies" (24-hour cancellation notice)
+# Everything else (names, phone numbers, address) is FAKE demo data.
+
+clinic:
+  name: "Maple Street Family Clinic"
+  name_ur: "میپل اسٹریٹ فیملی کلینک"
+  emergency_en: "911"
+  emergency_ur: "1122"   # Rescue 1122 (check the right number for your city)
+  timezone: "America/New_York"
+  phone: "555-0100"
+  address: "100 Example Street, Springfield"
+  parking: "Free parking is available in the lot behind the building."
+
+policy:
+  cancel_notice_hours: 24        # changes inside this window are "late" and may carry a fee
+  late_arrival_grace_minutes: 15 # later than this and we may ask to reschedule
+  arrive_early_new_minutes: 30
+  arrive_early_established_minutes: 15
+  min_lead_minutes: 120          # cannot book a slot starting sooner than this
+  max_advance_days: 90
+  slot_step_minutes: 15          # appointment start times fall on this grid
+  max_verify_attempts: 3
+  max_options: 3                 # how many choices we read out loud
+  search_horizon_days: 21        # how far ahead "earliest available" looks
+  new_patient_service: new_patient_visit
+  default_service_for_new_patients: general_consultation
+
+holidays:
+  - "2026-11-26"   # Thanksgiving
+  - "2026-12-25"
+  - "2027-01-01"
+  - "2027-05-31"
+  - "2027-07-05"
+  - "2027-09-06"
+  - "2027-11-25"
+  - "2027-12-24"
+
+services:
+  - key: general_consultation
+    name: "general consultation"
+    name_ur: "عمومی مشاورت"
+    duration_minutes: 30
+    requires: any
+    keywords: ["general", "consultation", "sick", "cold", "cough", "fever", "flu symptoms", "doctor visit", "see a doctor", "not feeling well", "pain", "sore throat", "rash", "regular visit"]
+  - key: new_patient_visit
+    name: "new patient visit"
+    name_ur: "نئے مریض کی وزٹ"
+    duration_minutes: 40
+    requires: new
+    keywords: ["new patient", "first visit", "first time", "establish care", "new to the clinic"]
+  - key: follow_up
+    name: "follow-up visit"
+    name_ur: "فالو اپ وزٹ"
+    duration_minutes: 20
+    requires: established
+    keywords: ["follow up", "follow-up", "followup", "recheck", "check results", "test results", "review"]
+  - key: annual_physical
+    name: "annual physical"
+    name_ur: "سالانہ جسمانی معائنہ"
+    duration_minutes: 45
+    requires: any
+    keywords: ["physical", "annual", "checkup", "check up", "check-up", "wellness", "yearly"]
+  - key: vaccination
+    name: "vaccination visit"
+    name_ur: "ویکسینیشن وزٹ"
+    duration_minutes: 15
+    requires: any
+    keywords: ["flu shot", "vaccine", "vaccination", "immunization", "shot", "booster", "jab"]
+  - key: lab_work
+    name: "lab work visit"
+    name_ur: "لیب ٹیسٹ وزٹ"
+    duration_minutes: 15
+    requires: any
+    keywords: ["blood test", "blood work", "bloodwork", "lab", "labs", "blood draw", "lab work"]
+
+providers:
+  - key: patel
+    name: "Amara Patel"
+    title: "Dr."
+    specialty: "Family medicine"
+    color: "#0B6E8A"
+    name_ur: "امارا پٹیل"
+    title_ur: "ڈاکٹر"
+    services: [general_consultation, new_patient_visit, follow_up, annual_physical, vaccination]
+    schedule:
+      mon: [["08:00", "12:00"], ["13:00", "17:00"]]
+      tue: [["08:00", "12:00"], ["13:00", "17:00"]]
+      wed: [["08:00", "12:00"], ["13:00", "17:00"]]
+      thu: [["08:00", "12:00"], ["13:00", "17:00"]]
+      fri: [["08:00", "12:00"]]
+  - key: nguyen
+    name: "Lucas Nguyen"
+    title: "Dr."
+    specialty: "Internal medicine"
+    color: "#7A5C9E"
+    name_ur: "لوکاس نگوین"
+    title_ur: "ڈاکٹر"
+    services: [general_consultation, new_patient_visit, follow_up, annual_physical]
+    schedule:
+      mon: [["09:00", "12:00"], ["13:00", "18:00"]]
+      tue: [["09:00", "12:00"], ["13:00", "18:00"]]
+      thu: [["09:00", "12:00"], ["13:00", "18:00"]]
+  - key: kim
+    name: "Grace Kim"
+    title: "NP"
+    specialty: "Nurse practitioner"
+    color: "#B5651D"
+    name_ur: "گریس کم"
+    title_ur: "نرس"
+    services: [general_consultation, follow_up, vaccination, lab_work]
+    schedule:
+      tue: [["09:00", "12:00"], ["13:00", "16:00"]]
+      wed: [["09:00", "12:00"], ["13:00", "16:00"]]
+      thu: [["09:00", "12:00"], ["13:00", "16:00"]]
+      fri: [["09:00", "12:00"], ["13:00", "16:00"]]
+      sat: [["09:00", "12:00"]]
+
+emergency_keywords:
+  - "chest pain"
+  - "can't breathe"
+  - "cannot breathe"
+  - "trouble breathing"
+  - "difficulty breathing"
+  - "heart attack"
+  - "stroke"
+  - "unconscious"
+  - "overdose"
+  - "suicid"
+  - "severe bleeding"
+  - "bleeding heavily"
+  - "allergic reaction"
+  - "911"
+  - "emergency"
+
+faq:
+  - id: hours
+    question: "What are your opening hours?"
+    keywords: ["hours", "open", "opening", "close", "closing", "time", "days", "weekend", "saturday", "sunday"]
+    answer: "We are open Monday to Friday, 8 AM to 5 PM, with limited Saturday hours from 9 AM to noon. We are closed on Sundays and public holidays."
+    question_ur: "آپ کے کھلنے کے اوقات کیا ہیں؟"
+    answer_ur: "ہم پیر سے جمعہ صبح 8 بجے سے شام 5 بجے تک کھلے ہیں، اور ہفتہ کو محدود اوقات صبح 9 بجے سے دوپہر 12 بجے تک ہیں۔ اتوار اور سرکاری چھٹیوں پر ہم بند ہوتے ہیں۔"
+  - id: location
+    question: "Where are you located?"
+    keywords: ["where", "address", "location", "located", "directions", "find", "street"]
+    answer: "We are at 100 Example Street, Springfield."
+    question_ur: "آپ کہاں واقع ہیں؟"
+    answer_ur: "ہم 100 ایگزیمپل اسٹریٹ، اسپرنگ فیلڈ میں ہیں۔"
+  - id: parking
+    question: "Is there parking?"
+    keywords: ["parking", "park", "car", "lot", "garage"]
+    answer: "Free parking is available in the lot behind the building."
+    question_ur: "کیا پارکنگ دستیاب ہے؟"
+    answer_ur: "عمارت کے پیچھے والے لاٹ میں مفت پارکنگ دستیاب ہے۔"
+  - id: bring
+    question: "What should I bring to my visit?"
+    keywords: ["bring", "documents", "paperwork", "id", "identification", "insurance", "card", "forms", "medications", "need to bring"]
+    answer: "Please bring a photo ID, your insurance card, and a list of your current medications. New patients will also complete a short registration form."
+    question_ur: "وزٹ پر کیا ساتھ لانا چاہیے؟"
+    answer_ur: "براہ کرم اپنا شناختی کارڈ، انشورنس کارڈ، اور اپنی موجودہ ادویات کی فہرست ساتھ لائیں۔ نئے مریض ایک مختصر رجسٹریشن فارم بھی بھریں گے۔"
+  - id: arrive
+    question: "How early should I arrive?"
+    keywords: ["early", "arrive", "arrival", "late", "grace", "minutes", "check-in", "checkin", "how soon"]
+    answer: "Please arrive 30 minutes early for a first visit and 15 minutes early otherwise. If you arrive more than 15 minutes late we may ask you to reschedule."
+    question_ur: "کتنی دیر پہلے پہنچنا چاہیے؟"
+    answer_ur: "پہلی وزٹ کے لیے 30 منٹ پہلے اور دیگر وزٹس کے لیے 15 منٹ پہلے پہنچیں۔ اگر آپ 15 منٹ سے زیادہ تاخیر سے پہنچیں تو ہم آپ سے اپائنٹمنٹ دوبارہ طے کرنے کا کہہ سکتے ہیں۔"
+  - id: cancellation
+    question: "What is your cancellation policy?"
+    keywords: ["cancellation", "cancel", "policy", "fee", "no-show", "noshow", "charge", "notice", "penalty"]
+    answer: "We ask for at least 24 hours notice to cancel or reschedule. Changes inside 24 hours are treated as late cancellations and a fee may apply."
+    question_ur: "منسوخی کی پالیسی کیا ہے؟"
+    answer_ur: "اپائنٹمنٹ منسوخ یا دوبارہ طے کرنے کے لیے ہم کم از کم 24 گھنٹے پہلے اطلاع چاہتے ہیں۔ 24 گھنٹوں کے اندر تبدیلی کو لیٹ کینسلیشن شمار کیا جاتا ہے اور فیس لاگو ہو سکتی ہے۔"
+  - id: new_patients
+    question: "Are you accepting new patients?"
+    keywords: ["new", "accepting", "patients", "register", "registration", "sign up", "join", "establish"]
+    answer: "Yes, we are accepting new patients. I can register you and book a new patient visit right now if you like."
+    question_ur: "کیا آپ نئے مریض قبول کر رہے ہیں؟"
+    answer_ur: "جی ہاں، ہم نئے مریض قبول کر رہے ہیں۔ اگر آپ چاہیں تو میں ابھی آپ کو رجسٹر کر کے نئے مریض کی وزٹ بک کر سکتا ہوں۔"
+  - id: insurance
+    question: "Which insurance do you accept?"
+    keywords: ["insurance", "accept", "coverage", "covered", "plans", "medicare", "medicaid", "insurer", "self-pay", "pay", "payment", "cost", "price"]
+    answer: "We accept most major insurance plans. Please call the front desk on 555-0100 to confirm your specific plan before your visit."
+    question_ur: "آپ کون سی انشورنس قبول کرتے ہیں؟"
+    answer_ur: "ہم زیادہ تر بڑے انشورنس پلانز قبول کرتے ہیں۔ براہ کرم وزٹ سے پہلے اپنے مخصوص پلان کی تصدیق کے لیے فرنٹ ڈیسک کو 555-0100 پر کال کریں۔"
+  - id: services
+    question: "What services do you offer?"
+    keywords: ["services", "offer", "provide", "do you do", "treat", "specialties", "what do you"]
+    answer: "We offer general consultations, new patient visits, follow-ups, annual physicals, vaccinations and lab work."
+    question_ur: "آپ کون سی خدمات فراہم کرتے ہیں؟"
+    answer_ur: "ہم عمومی مشاورت، نئے مریض کی وزٹ، فالو اپ، سالانہ جسمانی معائنہ، ویکسینیشن اور لیب ٹیسٹ فراہم کرتے ہیں۔"
+  - id: phone
+    question: "What is your phone number?"
+    keywords: ["phone", "number", "call", "contact", "reach", "email"]
+    answer: "You can reach the front desk on 555-0100 during opening hours."
+    question_ur: "آپ کا فون نمبر کیا ہے؟"
+    answer_ur: "آپ کھلنے کے اوقات میں فرنٹ ڈیسک سے 555-0100 پر رابطہ کر سکتے ہیں۔"

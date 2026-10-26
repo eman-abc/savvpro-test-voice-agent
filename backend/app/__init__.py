@@ -1,0 +1,1 @@
+"""Clinic voice assistant backend."""
