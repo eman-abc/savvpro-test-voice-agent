@@ -1,0 +1,108 @@
+- id: ur-book-flu-shot
+  title: "اردو: فلو کا ٹیکہ بک کرنا، وقت درمیان میں بدلنا"
+  lang: ur
+  tags: [urdu, booking, corrections]
+  steps:
+    - {say: "مجھے فلو کا ٹیکہ چاہیے", expect: {step: IDENTIFY, intent: book}}
+    - {say: "میرا نام احمد خان ہے", expect: {step: IDENTIFY}}
+    - {say: "میری تاریخ پیدائش بارہ جون انیس سو تراسی ہے", expect: {step: COLLECT, verified: true, reply_contains: ["ویکسینیشن"]}}
+    - {say: "کوئی بھی ڈاکٹر", expect: {step: COLLECT}}
+    - {say: "کل صبح 10 بجے", expect: {step: CONFIRM, reply_contains: ["صبح 10 بجے", "کل"]}}
+    - {say: "نہیں، شام 3 بجے", expect: {step: CONFIRM, reply_contains: ["دوپہر 3 بجے"]}}
+    - {say: "جی ہاں", expect: {step: MORE, action: book_appointment, reply_contains: ["بک ہو گئی"]}}
+    - {say: "نہیں شکریہ", expect: {ended: true}}
+  final: {outcome: booked, ended: true}
+
+- id: ur-roman-book
+  title: "Roman Urdu میں بات، جواب اردو رسم الخط میں"
+  tags: [urdu, roman-urdu, booking]
+  steps:
+    - {say: "mujhe kal subah 10 baje appointment chahiye", expect: {step: IDENTIFY, intent: book, reply_contains: ["شناخت"]}}
+    - {say: "mera naam Fatima Ali hai", expect: {step: IDENTIFY}}
+    - {say: "meri date of birth 28 february 1992 hai", expect: {step: COLLECT, verified: true}}
+
+- id: ur-cancel-late
+  title: "اردو: 24 گھنٹوں کے اندر منسوخی پر فیس کی وارننگ"
+  lang: ur
+  tags: [urdu, cancel, policy]
+  steps:
+    - {say: "میری اپائنٹمنٹ منسوخ کریں", expect: {step: IDENTIFY, intent: cancel}}
+    - {say: "لیام اوکونر، تیس جنوری انیس سو اڑسٹھ", expect: {step: CONFIRM, verified: true, reply_contains: ["لیٹ کینسلیشن"]}}
+    - {say: "جی ہاں", expect: {step: MORE, action: cancel_appointment, reply_contains: ["فیس لاگو"]}}
+  final: {outcome: cancelled}
+
+- id: ur-faq-hours
+  title: "اردو: کھلنے کے اوقات (بغیر شناخت کے)"
+  lang: ur
+  tags: [urdu, faq]
+  steps:
+    - {say: "آپ کے اوقات کیا ہیں", expect: {intent: faq, verified: false, reply_contains: ["صبح 8 بجے"]}}
+    - {say: "نہیں", expect: {ended: true}}
+  final: {outcome: faq}
+
+- id: ur-faq-parking
+  title: "اردو: پارکنگ کا سوال"
+  lang: ur
+  tags: [urdu, faq]
+  steps:
+    - {say: "پارکنگ کہاں ہے", expect: {intent: faq, reply_contains: ["مفت پارکنگ"]}}
+
+- id: ur-new-patient
+  title: "اردو: نیا مریض رجسٹر ہو کر وزٹ بک کرتا ہے"
+  lang: ur
+  tags: [urdu, registration, rules]
+  steps:
+    - {say: "مجھے اپائنٹمنٹ چاہیے، میں نیا مریض ہوں", expect: {step: REGISTER}}
+    - {say: "علی رضا", expect: {step: REGISTER}}
+    - {say: "پانچ مئی انیس سو بانوے", expect: {step: REGISTER}}
+    - {say: "5551234567", expect: {step: COLLECT, verified: true}}
+    - {say: "مجھے بخار ہے", expect: {reply_contains: ["40 منٹ"]}}
+
+- id: ur-emergency
+  title: "اردو: ایمرجنسی پر مقامی نمبر"
+  lang: ur
+  tags: [urdu, safety]
+  steps:
+    - {say: "مجھے سینے میں درد ہے", expect: {ended: true, reply_contains: ["1122"]}}
+  final: {outcome: emergency}
+
+- id: ur-human
+  title: "اردو: انسان سے بات کرنے کی درخواست"
+  lang: ur
+  tags: [urdu, handoff]
+  steps:
+    - {say: "مجھے کسی انسان سے بات کرنی ہے", expect: {ended: true, intent: handoff, reply_contains: ["ریسپشنسٹ"]}}
+  final: {outcome: handoff}
+
+- id: ur-cant-make-it
+  title: "اردو: 'میں آ نہیں سکتا' پر وضاحت مانگنا"
+  lang: ur
+  tags: [urdu, ambiguity]
+  steps:
+    - {say: "میں اپنی اپائنٹمنٹ پر آ نہیں سکتا", expect: {step: CLARIFY, decision: clarify, reply_contains: ["دوبارہ طے", "منسوخ"]}}
+    - {say: "منسوخ", expect: {step: IDENTIFY, intent: cancel}}
+
+- id: ur-wrong-identity
+  title: "اردو: غلط شناخت پر یہ نہیں بتایا جاتا کہ کیا غلط تھا"
+  lang: ur
+  tags: [urdu, safety, identity]
+  steps:
+    - {say: "اپائنٹمنٹ بک کرنی ہے", expect: {step: IDENTIFY}}
+    - {say: "جان سمتھ، پہلی جنوری انیس سو اسی", expect: {reply_contains: ["ریکارڈ سے نہیں ملیں"]}}
+
+- id: ur-english-words-mixed-in
+  title: "اردو اور انگریزی کا امتزاج"
+  tags: [urdu, code-switching]
+  steps:
+    - {say: "mujhe flu shot ka appointment chahiye", expect: {step: IDENTIFY, intent: book}}
+    - {say: "my name is Wei Zhang", expect: {step: IDENTIFY}}
+    - {say: "may 17 1995", expect: {step: COLLECT, verified: true}}
+
+- id: ur-silence
+  title: "اردو: خاموشی پر 'کیا آپ لائن پر ہیں؟' اور پھر کال ختم"
+  lang: ur
+  tags: [urdu, silence]
+  steps:
+    - {say: "", expect: {ended: false, reply_contains: ["لائن پر"]}}
+    - {say: "", expect: {ended: true, reply_contains: ["کال ختم"]}}
+  final: {outcome: no_response}

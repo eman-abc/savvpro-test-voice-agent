@@ -1,0 +1,54 @@
+- id: waitlist-joined-when-the-day-is-full
+  title: The day is full, the caller declines other days, and joins the waitlist
+  tags: [waitlist, booking]
+  setup:
+    - fill_day: {date: "2026-10-28", provider: kim}
+  steps:
+    - {say: "book a lab test", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT, verified: true}}
+    - {say: "wednesday", expect: {step: COLLECT}}
+    - {say: "any time", expect: {step: OFFER, reply_contains: ["nothing available"]}}
+    - {say: "no", expect: {step: WAITLIST, reply_contains: ["waitlist", "message you"]}}
+    - {say: "yes", expect: {step: MORE, action: join_waitlist, reply_contains: ["on the waitlist"]}}
+  final: {outcome: waitlisted}
+
+- id: waitlist-declined-then-another-day
+  title: The caller prefers to try another day instead of waiting
+  tags: [waitlist, corrections]
+  setup:
+    - fill_day: {date: "2026-10-28", provider: kim}
+  steps:
+    - {say: "book a lab test", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "wednesday", expect: {step: COLLECT}}
+    - {say: "any time", expect: {step: OFFER}}
+    - {say: "no", expect: {step: WAITLIST}}
+    - {say: "no", expect: {step: COLLECT, reply_contains: ["try instead"]}}
+    - {say: "friday morning", expect: {step: OFFER}}
+
+- id: waitlist-asked-for-directly
+  title: "\"Put me on the waitlist\" from the main menu"
+  tags: [waitlist]
+  steps:
+    - {say: "put me on the waitlist", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT, verified: true}}
+    - {say: "a lab test", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "next tuesday morning", expect: {step: WAITLIST, reply_contains: ["waitlist"]}}
+    - {say: "yes", expect: {step: MORE, action: join_waitlist}}
+  final: {outcome: waitlisted}
+
+- id: ur-waitlist-joined
+  title: "اردو: دن بھرا ہوا ہے، ویٹنگ لسٹ میں شامل ہونا"
+  lang: ur
+  tags: [urdu, waitlist]
+  setup:
+    - fill_day: {date: "2026-10-28", provider: kim}
+  steps:
+    - {say: "مجھے خون کا ٹیسٹ چاہیے", expect: {step: IDENTIFY, intent: book}}
+    - {say: "وی ژانگ، سترہ مئی انیس سو پچانوے", expect: {step: COLLECT, verified: true}}
+    - {say: "بدھ", expect: {step: COLLECT}}
+    - {say: "کوئی بھی وقت", expect: {step: OFFER}}
+    - {say: "نہیں", expect: {step: WAITLIST, reply_contains: ["ویٹنگ لسٹ"]}}
+    - {say: "جی ہاں", expect: {step: MORE, action: join_waitlist, reply_contains: ["ویٹنگ لسٹ میں ہیں"]}}
+  final: {outcome: waitlisted}

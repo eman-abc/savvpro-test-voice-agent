@@ -1,0 +1,52 @@
+- id: cancel-late-visit
+  title: Cancelling a visit inside 24 hours warns about the fee
+  tags: [cancel, policy]
+  steps:
+    - {say: "I need to cancel my appointment", expect: {step: IDENTIFY, intent: cancel}}
+    - {say: "Liam O'Connor, January 30th 1968", expect: {step: CONFIRM, reply_contains: ["late cancellation"]}}
+    - {say: "yes", expect: {step: MORE, action: cancel_appointment, reply_contains: ["fee may apply"]}}
+  final: {outcome: cancelled}
+
+- id: cancel-declined
+  title: Caller decides to keep the appointment
+  tags: [cancel]
+  steps:
+    - {say: "cancel my appointment", expect: {step: IDENTIFY}}
+    - {say: "James Carter, November 2nd 1972", expect: {step: CONFIRM}}
+    - {say: "no", expect: {step: MORE, reply_contains: ["kept your appointment"]}}
+
+- id: reschedule-pick-one-of-two
+  title: Two appointments, picks "the lab one" and moves it
+  tags: [reschedule]
+  steps:
+    - {say: "reschedule my appointment", expect: {step: IDENTIFY, intent: reschedule}}
+    - {say: "Olivia Johnson-Smith, December 5th 1979", expect: {step: SELECT, reply_contains: ["The first is", "The second is"]}}
+    - {say: "the lab one", expect: {step: COLLECT}}
+    - {say: "next tuesday afternoon", expect: {step: OFFER}}
+    - {say: "the last one", expect: {step: CONFIRM}}
+    - {say: "yes", expect: {step: MORE, action: reschedule_appointment}}
+  final: {outcome: rescheduled}
+
+- id: reschedule-late-declined
+  title: Late reschedule needs the fee rule acknowledged; caller declines
+  tags: [reschedule, policy]
+  steps:
+    - {say: "move my appointment", expect: {step: IDENTIFY, intent: reschedule}}
+    - {say: "Liam O'Connor, January 30th 1968", expect: {step: CONFIRM, reply_contains: ["late cancellation"]}}
+    - {say: "no", expect: {step: MORE}}
+
+- id: manage-no-upcoming-offers-booking
+  title: Nothing to cancel, so it offers to book
+  tags: [cancel]
+  steps:
+    - {say: "cancel my appointment", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {reply_contains: ["don't see any upcoming appointments"]}}
+    - {say: "yes", expect: {step: COLLECT, verified: true}}
+
+- id: list-upcoming
+  title: Caller asks when their next appointment is
+  tags: [list]
+  steps:
+    - {say: "when is my next appointment", expect: {step: IDENTIFY, intent: list}}
+    - {say: "James Carter, November 2nd 1972", expect: {reply_contains: ["annual physical with Dr. Nguyen", "Monday, November 2nd"]}}
+  final: {outcome: listed}

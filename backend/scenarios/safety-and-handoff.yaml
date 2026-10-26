@@ -1,0 +1,86 @@
+- id: emergency-ends-call
+  title: Emergency keyword overrides everything
+  tags: [safety]
+  steps:
+    - {say: "I have chest pain and need to book", expect: {ended: true, reply_contains: ["911"]}}
+  final: {outcome: emergency}
+
+- id: identity-three-failures
+  title: Three wrong identities hand off, never revealing which part was wrong
+  tags: [safety, identity]
+  steps:
+    - {say: "book an appointment", expect: {step: IDENTIFY}}
+    - {say: "John Smith, January 1st 1980", expect: {reply_contains: ["couldn't match"], reply_not_contains: ["date of birth was"]}}
+    - {say: "Jane Doe, March 3rd 1975", expect: {reply_contains: ["new patient"]}}
+    - {say: "Foo Bar, June 6th 1966", expect: {ended: true, reply_contains: ["transferring you"]}}
+  final: {outcome: handoff}
+
+- id: human-requested
+  title: Caller asks for a real person and staff get a summary
+  tags: [handoff]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "let me talk to a real person", expect: {ended: true, intent: handoff}}
+  final: {outcome: handoff}
+
+- id: frustration
+  title: Frustration hands off immediately
+  tags: [handoff]
+  steps:
+    - {say: "this is useless", expect: {ended: true, intent: handoff}}
+  final: {outcome: handoff}
+
+- id: gibberish-escalates
+  title: Gibberish escalates to a person after three misses
+  tags: [handoff, robustness]
+  steps:
+    - {say: "blorp", expect: {ended: false}}
+    - {say: "asdf qwer", expect: {ended: false}}
+    - {say: "zxcv bnm", expect: {ended: true, reply_contains: ["transferring you"]}}
+  final: {outcome: handoff}
+
+- id: silence-prompts-then-hangs-up
+  title: "\"Are you still there?\" once, then the call ends politely"
+  tags: [silence, robustness]
+  steps:
+    - {say: "", expect: {ended: false, reply_contains: ["still there"]}}
+    - {say: "", expect: {ended: true, reply_contains: ["end the call"]}}
+  final: {outcome: no_response}
+
+- id: silence-then-the-caller-answers
+  title: A pause, then the caller carries on
+  tags: [silence]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "", expect: {step: IDENTIFY, reply_contains: ["still there", "date of birth"]}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT, verified: true}}
+
+- id: faq-needs-no-verification
+  title: Opening hours without verifying identity
+  tags: [faq]
+  steps:
+    - {say: "what time do you open", expect: {intent: faq, step: MORE, verified: false, reply_contains: ["8 AM to 5 PM"]}}
+    - {say: "no", expect: {ended: true}}
+  final: {outcome: faq}
+
+- id: faq-cancellation-policy-is-not-cancelling
+  title: Asking about the cancellation policy does not start a cancellation
+  tags: [faq, ambiguity]
+  steps:
+    - {say: "what is your cancellation policy", expect: {intent: faq, reply_contains: ["24 hours"]}}
+
+- id: faq-mid-booking
+  title: A question mid-booking is answered, then the booking resumes
+  tags: [faq, interruption]
+  steps:
+    - {say: "book a lab test", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "what do I need to bring?", expect: {step: COLLECT, reply_contains: ["photo ID", "What day would you like"]}}
+
+- id: goodbye-closes-call
+  title: Goodbye ends the call and later input is refused
+  tags: [navigation]
+  steps:
+    - {say: "goodbye", expect: {ended: true}}
+    - {say: "hello?", expect: {reply_contains: ["ended"]}}

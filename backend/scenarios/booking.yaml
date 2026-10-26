@@ -1,0 +1,124 @@
+- id: book-flu-shot
+  title: Established patient books a flu shot
+  tags: [booking, happy-path]
+  steps:
+    - {say: "I need a flu shot", expect: {step: IDENTIFY, intent: book}}
+    - {say: "Priya Sharma, July 23rd 1990", expect: {step: COLLECT, verified: true, slots: {Service: vaccination}}}
+    - {say: "any provider", expect: {step: COLLECT}}
+    - {say: "tomorrow at 10 am", expect: {step: CONFIRM, reply_contains: ["10 AM", "tomorrow"]}}
+    - {say: "yes", expect: {step: MORE, action: book_appointment, reply_contains: ["You're booked", "15 minutes early"]}}
+    - {say: "no thanks", expect: {ended: true}}
+  final: {outcome: booked, ended: true}
+
+- id: book-everything-in-one-sentence
+  title: Caller gives service, doctor, day, time and identity in one breath
+  tags: [booking, slot-filling]
+  steps:
+    - say: "book a flu shot with dr patel next tuesday at 3 pm, I'm Wei Zhang born may 17 1995"
+      expect: {step: CONFIRM, reply_contains: ["3 PM", "Dr. Patel", "Tuesday, November 3rd"]}
+    - {say: "yes", expect: {step: MORE, action: book_appointment}}
+  final: {outcome: booked}
+
+- id: book-word-numbers-and-spoken-dob
+  title: Spoken numbers everywhere ("half past two", "nineteen eighty eight")
+  tags: [booking, speech-noise]
+  steps:
+    - {say: "I'd like to schedule a check up", expect: {step: IDENTIFY, intent: book}}
+    - {say: "jose hernandez april twenty first nineteen eighty eight", expect: {step: COLLECT, verified: true}}
+    - {say: "no preference", expect: {step: COLLECT}}
+    - {say: "next monday at half past two", expect: {step: CONFIRM, reply_contains: ["2:30 PM", "Monday, November 2nd"]}}
+    - {say: "yes", expect: {step: MORE}}
+  final: {outcome: booked}
+
+- id: book-name-spelled-by-ear
+  title: Speech-to-text spells the surname differently ("Gonsales")
+  tags: [identity, speech-noise]
+  steps:
+    - {say: "book an appointment", expect: {step: IDENTIFY}}
+    - {say: "Maria Gonsales, March 14th 1985", expect: {verified: true, step: COLLECT}}
+
+- id: book-fillers-around-yes
+  title: "Polite filler around a confirmation (\"um yes please, that's great\")"
+  tags: [booking, speech-noise]
+  steps:
+    - {say: "book a flu shot, I'm Wei Zhang born may 17 1995", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "next tuesday at 10", expect: {step: CONFIRM}}
+    - {say: "um yes please that's great", expect: {step: MORE, action: book_appointment}}
+  final: {outcome: booked}
+
+- id: book-earliest-available
+  title: "\"Earliest available\" searches forward and offers three openings"
+  tags: [booking, availability]
+  steps:
+    - {say: "book a flu shot", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {verified: true}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "earliest available", expect: {step: OFFER, reply_contains: ["earliest openings"]}}
+    - {say: "the first one", expect: {step: CONFIRM}}
+
+- id: book-exact-time-taken
+  title: Exact time is taken, so it offers the closest alternatives
+  tags: [booking, availability]
+  steps:
+    - {say: "book an annual physical thursday at 10", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "Dr Patel", expect: {step: OFFER, reply_contains: ["10 AM isn't available"]}}
+    - {say: "yes", expect: {step: OFFER, reply_contains: ["Which one"]}}
+    - {say: "the last one", expect: {step: CONFIRM}}
+
+- id: book-sunday-and-holiday
+  title: Closed day and public holiday are explained, and the rest is kept
+  tags: [rules, availability]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "sunday", expect: {reply_contains: ["closed on Sundays"]}}
+    - {say: "november 26th", expect: {reply_contains: ["holiday"]}}
+    - {say: "tuesday at 2pm", expect: {step: CONFIRM}}
+
+- id: book-provider-day-off
+  title: Doctor does not work that day
+  tags: [rules, availability]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "Dr. Nguyen on wednesday", expect: {reply_contains: ["doesn't work on Wednesdays"]}}
+
+- id: book-provider-service-mismatch
+  title: Doctor does not offer that service
+  tags: [rules]
+  steps:
+    - {say: "book a lab test", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "Dr. Patel", expect: {reply_contains: ["doesn't offer", "NP Kim"]}}
+
+- id: book-new-patient-registers
+  title: New patient registers, is moved to a new patient visit, books
+  tags: [booking, registration, rules]
+  steps:
+    - {say: "book an appointment", expect: {step: IDENTIFY}}
+    - {say: "I'm a new patient", expect: {step: REGISTER}}
+    - {say: "Alex Rivera", expect: {step: REGISTER}}
+    - {say: "May 5th 1992", expect: {step: REGISTER}}
+    - {say: "555 123 4567", expect: {step: COLLECT, reply_contains: ["Welcome, Alex"]}}
+    - {say: "I feel sick", expect: {reply_contains: ["40 minutes"], slots: {Service: "new patient"}}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "friday at 9", expect: {step: CONFIRM}}
+    - {say: "yes", expect: {step: MORE, reply_contains: ["30 minutes early"]}}
+  final: {outcome: booked}
+
+- id: book-followup-needs-history
+  title: A follow-up needs a past visit, so a first-time patient gets a new patient visit
+  tags: [rules]
+  steps:
+    - {say: "book a follow-up", expect: {step: IDENTIFY}}
+    - {say: "Aisha Rahman, September 9th 2001", expect: {slots: {Service: "new patient"}}}
+
+- id: book-established-cannot-new-patient-visit
+  title: Established patient cannot book a new patient visit
+  tags: [rules]
+  steps:
+    - {say: "book a new patient visit", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {reply_contains: ["only for first-time patients"]}}

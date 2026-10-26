@@ -1,0 +1,89 @@
+- id: correct-inside-one-sentence
+  title: "\"Thursday at 3, no wait, Friday morning\": the last mention wins"
+  tags: [corrections]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "Thursday at 3, no wait, Friday morning", expect: {step: OFFER, slots: {Date: "Friday", Time: morning}}}
+
+- id: correct-at-confirm
+  title: Changes the time at the confirmation step
+  tags: [corrections]
+  steps:
+    - {say: "book a flu shot, I'm Wei Zhang born may 17 1995", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "next tuesday at 10", expect: {step: CONFIRM, slots: {Time: "10 AM"}}}
+    - {say: "actually make it 3 pm", expect: {step: CONFIRM, slots: {Time: "3 PM"}, reply_contains: ["3 PM"]}}
+    - {say: "yes", expect: {step: MORE}}
+  final: {outcome: booked}
+
+- id: correct-day-while-choosing
+  title: Changes the day while choosing between options
+  tags: [corrections]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "next tuesday morning", expect: {step: OFFER}}
+    - {say: "how about wednesday instead", expect: {reply_contains: ["Wednesday"]}}
+
+- id: correct-switch-option-at-confirm
+  title: Picks a different option after the confirmation prompt
+  tags: [corrections]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "next tuesday morning", expect: {step: OFFER}}
+    - {say: "the second one", expect: {step: CONFIRM}}
+    - {say: "no, the first one", expect: {step: CONFIRM}}
+
+- id: correct-no-then-change-time
+  title: Says no at confirm, then names what to change
+  tags: [corrections]
+  steps:
+    - {say: "book a flu shot, I'm Wei Zhang born may 17 1995", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "next tuesday at 10", expect: {step: CONFIRM}}
+    - {say: "no, change the time", expect: {step: COLLECT, reply_contains: ["What time"]}}
+
+- id: change-of-mind-book-to-cancel
+  title: Starts booking, then asks to cancel instead
+  tags: [corrections, flow-switch]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "James Carter, November 2nd 1972", expect: {step: COLLECT, verified: true}}
+    - {say: "cancel my appointment instead", expect: {step: CONFIRM, reply_contains: ["Do you want to cancel"]}}
+
+- id: start-over
+  title: "\"Never mind\" clears the request but keeps the verified patient"
+  tags: [corrections]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "never mind", expect: {step: ROUTE, verified: true}}
+
+- id: ambiguous-cant-make-it
+  title: "\"I can't make it\" is ambiguous, so it asks instead of guessing"
+  tags: [ambiguity]
+  steps:
+    - say: "I can't make it to my appointment"
+      expect: {step: CLARIFY, decision: clarify, reply_contains: ["reschedule", "cancel"]}
+    - {say: "cancel it", expect: {step: IDENTIFY, intent: cancel}}
+
+- id: repeat-last-reply
+  title: Caller asks for a repeat
+  tags: [navigation]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "can you repeat that", expect: {step: IDENTIFY, intent: repeat, reply_contains: ["verify who you are"]}}
+
+- id: weekday-answer-is-not-the-hours-faq
+  title: "\"Saturday\" answers the date question instead of triggering the hours FAQ"
+  tags: [ambiguity]
+  steps:
+    - {say: "book a physical", expect: {step: IDENTIFY}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT}}
+    - {say: "any", expect: {step: COLLECT}}
+    - {say: "saturday", expect: {slots: {Date: "Saturday"}}}
