@@ -1,0 +1,35 @@
+# Local production-like stack: the app container + Postgres.
+#   docker compose up --build        then open http://localhost:8000
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: clinic
+      POSTGRES_PASSWORD: clinic
+      POSTGRES_DB: clinic
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: postgresql://clinic:clinic@db:5432/clinic
+      JWT_SECRET: local-compose-secret-change-me-0123456789
+      COOKIE_SECURE: "false"   # plain http on localhost; Render serves https so render.yaml sets it to true
+      DEMO_MODE: "true"
+      TRUSTED_PROXY_COUNT: "0"
+      METRICS_TOKEN: local-metrics-token   # GET /metrics with "Authorization: Bearer local-metrics-token"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

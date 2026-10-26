@@ -1,0 +1,20 @@
+# Render Blueprint: New > Blueprint > pick this repo. Deploys the Dockerfile as one web service.
+# Free instances sleep after ~15 minutes idle and have no persistent disk. That is fine for a
+# demo because fake data is re-seeded on every start.
+services:
+  - type: web
+    name: clinic-voice-agent
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"   # Render adds one proxy hop; check your logs if you put a CDN in front
+      - key: DEMO_MODE
+        value: "true"
