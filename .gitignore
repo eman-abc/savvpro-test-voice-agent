@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+backend/data/
+backend/static/
+node_modules/
+frontend/dist/
+*.log
+.DS_Store
+.hypothesis/
