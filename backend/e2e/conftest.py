@@ -33,6 +33,8 @@ def base_url(tmp_path_factory):
         "DEMO_MODE": "true",
         "RATE_LIMIT_PER_MINUTE": "100000",
         "BACKGROUND_ENABLED": "false",
+        "STT_PROVIDER": "fake",  # server-side speech path without a real provider key
+        "FAKE_STT_TEXT": "what time do you open",
     }
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.asgi:app", "--port", str(port), "--log-level", "warning"],
@@ -61,7 +63,7 @@ def browser():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        b = p.chromium.launch()
+        b = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"])
         yield b
         b.close()
 
@@ -69,7 +71,7 @@ def browser():
 @pytest.fixture
 def page(browser, base_url):
     ctx = browser.new_context(
-        viewport={"width": 1280, "height": 860}, bypass_csp=True
+        viewport={"width": 1280, "height": 860}, bypass_csp=True, permissions=["microphone"]
     )  # bypass_csp lets axe be injected
     pg = ctx.new_page()
     pg.errors = []

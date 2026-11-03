@@ -56,6 +56,8 @@ export interface Config {
   demo_mode: boolean;
   services: { key: string; name: string; minutes: number }[];
   policy: { cancel_notice_hours: number };
+  stt?: boolean;
+  whatsapp?: boolean;
   demo_patients?: { name: string; dob: string; note: string }[];
   demo_staff?: { username: string; password: string };
 }
@@ -141,6 +143,8 @@ export interface NotificationRow {
   lang: string;
   reply_text: string | null;
   phone_last4: string;
+  delivery: string | null;
+  error: string | null;
 }
 export interface WaitlistRow {
   id: number;
@@ -155,4 +159,19 @@ export interface WaitlistRow {
   lang: string;
   offered_start: string | null;
   offer_expires_at: string | null;
+}
+export interface PatientRow {
+  id: number;
+  name: string;
+  phone_last4: string | null;
+  lang: string;
+}
+export interface ChannelStatus {
+  whatsapp: { enabled: boolean; webhook_path: string; restricted_to_allowed_numbers: boolean; template_configured: boolean };
+  speech_to_text: { provider: string };
+}
+export interface Heard {
+  text: string;
+  confidence: number | null;
+  language: string;
 }

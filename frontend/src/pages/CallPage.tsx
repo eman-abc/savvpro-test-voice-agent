@@ -4,6 +4,7 @@ import Stepper from "../components/Stepper";
 import TraceLedger from "../components/TraceLedger";
 import { ApiError, api } from "../lib/api";
 import { buildIcs, outcomeLabel, parseLocal } from "../lib/format";
+import { recorderSupported, useRecorder } from "../lib/recorder";
 import { type Lang, hasVoice, speak, speechInputSupported, speechOutputSupported, stopSpeaking, useRecognizer } from "../lib/speech";
 import type { AppointmentInfo, Config, Progress, SlotView, Trace, TurnOut } from "../lib/types";
 
@@ -37,10 +38,10 @@ const IDLE_MS = Number(new URLSearchParams(window.location.search).get("idle")) 
 const langOf = (t: string): string | undefined => (/[\u0600-\u06FF]/.test(t) ? "ur" : undefined);
 
 /** A dropped connection is retried with the same sequence number, so the server can never act twice. */
-async function turnWithRetry(id: string, text: string, seq: number): Promise<TurnOut> {
+async function turnWithRetry(id: string, text: string, seq: number, asr?: number | null): Promise<TurnOut> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await api.turn(id, text, seq);
+      return await api.turn(id, text, seq, asr);
     } catch (e) {
       if (!(e instanceof ApiError) || e.status !== 0 || attempt >= 2) throw e;
       await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
@@ -97,9 +98,14 @@ export default function CallPage({ config }: { config: Config | null }) {
   }, []);
 
   const recognizer = useRecognizer((text) => void send(text), lang);
+  const [transcribing, setTranscribing] = useState(false);
+  const [serverSttBroken, setServerSttBroken] = useState(false);
+  const [sttNote, setSttNote] = useState<string | null>(null);
+  const useServerStt = !!config?.stt && recorderSupported() && !serverSttBroken;
+  const recorder = useRecorder((blob) => void transcribe(blob));
 
   const send = useCallback(
-    async (raw: string) => {
+    async (raw: string, asr?: number | null) => {
       const text = raw.trim();
       const id = callRef.current;
       if (!id) return;
@@ -108,7 +114,7 @@ export default function CallPage({ config }: { config: Config | null }) {
       if (text) setMsgs((m) => [...m, { who: "user", text }]); // an empty turn is a silence, not something the caller said
       setBusy(true);
       try {
-        const out = await turnWithRetry(id, text, seqRef.current);
+        const out = await turnWithRetry(id, text, seqRef.current, asr);
         setBusy(false);
         await apply(out);
         if (handsFreeRef.current && !out.ended) recognizerStartRef.current();
@@ -122,8 +128,7 @@ export default function CallPage({ config }: { config: Config | null }) {
     [apply],
   );
 
-  const recognizerStartRef = useRef(recognizer.start);
-  recognizerStartRef.current = recognizer.start;
+  const recognizerStartRef = useRef<() => void>(() => undefined);
 
   const startCall = async () => {
     stopSpeaking();
@@ -156,20 +161,45 @@ export default function CallPage({ config }: { config: Config | null }) {
 
   // After a pause the assistant asks "are you still there?" (an empty turn); a second pause ends the call.
   useEffect(() => {
-    if (!callId || ended || busy || speaking || recognizer.listening || input) return;
+    if (!callId || ended || busy || speaking || recognizer.listening || recorder.recording || transcribing || input) return;
     const t = setTimeout(() => void send(""), IDLE_MS);
     return () => clearTimeout(t);
-  }, [callId, ended, busy, speaking, recognizer.listening, input, msgs.length, send]);
+  }, [callId, ended, busy, speaking, recognizer.listening, recorder.recording, transcribing, input, msgs.length, send]);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!busy && !ended && input.trim()) void send(input);
   };
 
-  const toggleMic = () => {
-    if (recognizer.listening) return recognizer.stop();
+  /** Audio -> text (a pretrained model on the server) -> the same turn as typed text, plus a confidence number. */
+  async function transcribe(blob: Blob) {
+    const id = callRef.current;
+    if (!id) return;
+    setTranscribing(true);
+    setSttNote(null);
+    try {
+      const heard = await api.stt(id, blob, langRef.current);
+      if (!heard.text.trim()) setSttNote(langRef.current === "ur" ? "میں سن نہیں سکا۔ دوبارہ کوشش کریں۔" : "I didn't catch that. Try again.");
+      else await send(heard.text, heard.confidence);
+    } catch {
+      setServerSttBroken(true); // fall back to the browser's own recogniser for the rest of this call
+      setSttNote("Server speech recognition isn't available right now, so I'll use your browser's instead. Tap the microphone again.");
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  const startListening = () => {
     stopSpeaking();
-    recognizer.start();
+    if (useServerStt) void recorder.start();
+    else recognizer.start();
+  };
+  recognizerStartRef.current = startListening;
+
+  const toggleMic = () => {
+    if (recorder.recording) return recorder.stop(); // stop and send
+    if (recognizer.listening) return recognizer.stop();
+    startListening();
   };
 
   const downloadIcs = () => {
@@ -252,7 +282,8 @@ export default function CallPage({ config }: { config: Config | null }) {
             </div>
           )}
           {error && <p className="notice error" role="alert" style={{ margin: "0 16px 12px" }}>{error}</p>}
-          {recognizer.error && <p className="notice info" role="status" style={{ margin: "0 16px 12px" }}>{recognizer.error}</p>}
+          {(recognizer.error || recorder.error || sttNote) && <p className="notice info" role="status" style={{ margin: "0 16px 12px" }}>{recognizer.error || recorder.error || sttNote}</p>}
+          {transcribing && <p className="typing" role="status" style={{ margin: "0 16px 8px" }}>{lang === "ur" ? "آواز کو متن میں بدل رہا ہوں…" : "Transcribing…"}</p>}
           {ended ? (
             <div className="composer">
               <p className="muted">The call has ended.</p>
@@ -270,12 +301,12 @@ export default function CallPage({ config }: { config: Config | null }) {
               <form className="composer-row" onSubmit={onSubmit}>
                 <button
                   type="button"
-                  className={`mic ${recognizer.listening ? "on" : ""}`}
+                  className={`mic ${recognizer.listening || recorder.recording ? "on" : ""}`}
                   onClick={toggleMic}
-                  disabled={busy || !speechInputSupported()}
-                  aria-pressed={recognizer.listening}
-                  aria-label={recognizer.listening ? "Stop listening" : "Speak to the assistant"}
-                  title={speechInputSupported() ? "Speak" : "Voice input isn't supported in this browser"}
+                  disabled={busy || transcribing || !(useServerStt || speechInputSupported())}
+                  aria-pressed={recognizer.listening || recorder.recording}
+                  aria-label={recorder.recording ? "Stop and send" : recognizer.listening ? "Stop listening" : "Speak to the assistant"}
+                  title={useServerStt || speechInputSupported() ? (recorder.recording ? "Tap to stop and send" : "Speak") : "Voice input isn't supported in this browser"}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                     <rect x="9" y="3" width="6" height="12" rx="3" />
@@ -283,7 +314,7 @@ export default function CallPage({ config }: { config: Config | null }) {
                   </svg>
                 </button>
                 <label className="sr-only" htmlFor="say">Type what you would say</label>
-                <input id="say" className="input" dir="auto" value={input} onChange={(e) => setInput(e.target.value)} placeholder={recognizer.listening ? (lang === "ur" ? "سن رہا ہوں…" : "Listening…") : lang === "ur" ? "یا یہاں لکھیں" : "Or type what you would say"} autoComplete="off" maxLength={500} disabled={busy} />
+                <input id="say" className="input" dir="auto" value={input} onChange={(e) => setInput(e.target.value)} placeholder={recognizer.listening || recorder.recording ? (lang === "ur" ? "سن رہا ہوں…" : "Listening…") : lang === "ur" ? "یا یہاں لکھیں" : "Or type what you would say"} autoComplete="off" maxLength={500} disabled={busy} />
                 <button className="btn primary" type="submit" disabled={busy || !input.trim()}>Send</button>
               </form>
               <div className="toggles">

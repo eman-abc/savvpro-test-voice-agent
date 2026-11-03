@@ -230,3 +230,31 @@ def test_accessibility_messages_and_waitlist_tabs(page, base_url):
     page.get_by_role("tab", name="Waitlist").click()
     page.wait_for_selector(".empty, table.list")
     assert axe_violations(page) == []
+
+
+# ------------------------------------------------------------------ server-side speech and WhatsApp panel ---
+def test_microphone_records_transcribes_on_the_server_and_the_assistant_answers(page, base_url):
+    start_call(page, base_url)
+    before = page.locator(".msg.bot").count()
+    page.get_by_role("button", name="Speak to the assistant").click()
+    page.wait_for_selector("button[aria-label='Stop and send']")
+    page.wait_for_timeout(900)  # let the fake microphone produce a little audio
+    page.get_by_role("button", name="Stop and send").click()
+    page.wait_for_function("n => document.querySelectorAll('.msg.bot').length > n", arg=before, timeout=10000)
+    assert page.locator(".msg.user").last.inner_text().endswith("what time do you open")
+    assert "8 AM to 5 PM" in page.locator(".msg.bot").last.inner_text()
+    assert page.errors == []
+
+
+def test_staff_sees_channel_status_and_can_link_a_number(page, base_url):
+    staff_login(page, base_url)
+    page.get_by_role("tab", name="Messages").click()
+    page.wait_for_selector("section[aria-label='Channels']")
+    panel = page.locator("section[aria-label='Channels']")
+    assert "not configured" in panel.inner_text() and "fake" in panel.inner_text()
+    wei = panel.locator("option", has_text="Wei Zhang").get_attribute("value")  # the label also shows the phone suffix
+    panel.get_by_label("Demo patient").select_option(value=wei)
+    panel.get_by_label("Your WhatsApp number (with country code)").fill("+92 300 1112222")
+    panel.get_by_role("button", name="Link number").click()
+    page.wait_for_function("() => /ending 2222/.test(document.body.innerText)")
+    assert axe_violations(page) == []

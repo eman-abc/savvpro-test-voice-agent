@@ -3,7 +3,7 @@ import TraceLedger from "../components/TraceLedger";
 import WeekCalendar from "../components/WeekCalendar";
 import { ApiError, api } from "../lib/api";
 import { addDays, formatDay, formatTime, isoDate, mondayOf, outcomeLabel, parseLocal } from "../lib/format";
-import type { CallDetail, CallSummary, Config, NotificationRow, Provider, ScenarioRun, StaffAppointment, Stats, WaitlistRow } from "../lib/types";
+import type { CallDetail, CallSummary, ChannelStatus, Config, NotificationRow, PatientRow, Provider, ScenarioRun, StaffAppointment, Stats, WaitlistRow } from "../lib/types";
 
 type Tab = "calendar" | "appointments" | "messages" | "waitlist" | "calls" | "scenarios";
 
@@ -423,7 +423,7 @@ function ScenariosTab({ onError }: { onError: (e: unknown) => void }) {
   );
 }
 
-const statusTone = (s: string) => (["confirmed", "accepted", "booked"].includes(s) ? "ok" : ["cancelled", "declined", "expired", "failed"].includes(s) ? "bad" : ["awaiting_confirm", "offered"].includes(s) ? "warn" : "");
+const statusTone = (s: string) => (["confirmed", "accepted", "booked", "delivered", "read"].includes(s) ? "ok" : ["cancelled", "declined", "expired", "failed"].includes(s) ? "bad" : ["awaiting_confirm", "offered", "window_closed", "skipped"].includes(s) ? "warn" : "");
 
 function MessagesTab({ onChange, onError, isAdmin }: { onChange: () => void; onError: (e: unknown) => void; isAdmin: boolean }) {
   const [rows, setRows] = useState<NotificationRow[] | null>(null);
@@ -457,6 +457,7 @@ function MessagesTab({ onChange, onError, isAdmin }: { onChange: () => void; onE
   if (rows === null) return <p className="empty">Loading messages…</p>;
   return (
     <>
+      <ChannelPanel isAdmin={isAdmin} onError={onError} />
       <div className="toolbar">
         {isAdmin && <button className="btn small" onClick={sendDue}>Send due reminders now (next 14 days)</button>}
         <span className="muted">Messages are recorded here. In production an SMS/WhatsApp adapter delivers them; replies arrive on the webhook.</span>
@@ -479,7 +480,11 @@ function MessagesTab({ onChange, onError, isAdmin }: { onChange: () => void; onE
                     <span dir="auto" lang={n.lang === "ur" ? "ur" : undefined}>{n.body}</span>
                     {n.reply_text && <div className="muted">Patient replied: <b dir="auto">{n.reply_text}</b></div>}
                   </td>
-                  <td><span className={`badge ${statusTone(n.status)}`}>{n.status.replace("_", " ")}</span></td>
+                  <td>
+                    <span className={`badge ${statusTone(n.status)}`}>{n.status.replace("_", " ")}</span>
+                    {n.delivery && n.delivery !== n.status && <div><span className={`badge ${statusTone(n.delivery)}`} title="Reported by WhatsApp">{n.delivery}</span></div>}
+                    {n.error && <div className="muted" style={{ maxWidth: 220 }}>{n.error}</div>}
+                  </td>
                   <td>
                     {open ? (
                       <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
@@ -530,5 +535,65 @@ function WaitlistTab({ onChange, onError }: { onChange: () => void; onError: (e:
         ))}
       </tbody>
     </table>
+  );
+}
+
+function ChannelPanel({ isAdmin, onError }: { isAdmin: boolean; onError: (e: unknown) => void }) {
+  const [status, setStatus] = useState<ChannelStatus | null>(null);
+  const [patients, setPatients] = useState<PatientRow[]>([]);
+  const [patientId, setPatientId] = useState<number | "">("");
+  const [phone, setPhone] = useState("");
+  const [linked, setLinked] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.channels().then(setStatus).catch(onError);
+    api.patients().then(setPatients).catch(onError);
+  }, [onError]);
+
+  const link = async (e: FormEvent) => {
+    e.preventDefault();
+    if (patientId === "") return;
+    try {
+      const r = await api.linkPhone(patientId, phone);
+      setLinked(`Linked to a number ending ${r.phone_last4}. Message the clinic's WhatsApp number from that phone first (this opens WhatsApp's 24-hour window), then send reminders.`);
+      setPhone("");
+      setPatients(await api.patients());
+    } catch (err) {
+      onError(err);
+    }
+  };
+
+  if (!status) return null;
+  return (
+    <section className="panel" style={{ padding: "12px 16px", marginBottom: 12 }} aria-label="Channels">
+      <p style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <span>WhatsApp: <span className={`badge ${status.whatsapp.enabled ? "ok" : "warn"}`}>{status.whatsapp.enabled ? "connected" : "not configured"}</span></span>
+        <span>Speech-to-text: <span className="badge">{status.speech_to_text.provider}</span></span>
+        {status.whatsapp.enabled && (
+          <span className="muted">
+            webhook <code>{status.whatsapp.webhook_path}</code>
+            {status.whatsapp.restricted_to_allowed_numbers ? " · restricted to allowed numbers" : ""}
+            {status.whatsapp.template_configured ? " · template set" : " · no template (replies only inside 24 h)"}
+          </span>
+        )}
+      </p>
+      {isAdmin && (
+        <form onSubmit={link} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginTop: 8 }}>
+          <div className="field">
+            <label htmlFor="lp">Demo patient</label>
+            <select id="lp" className="input" value={patientId} onChange={(e) => setPatientId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">Choose…</option>
+              {patients.map((p) => <option key={p.id} value={p.id}>{p.name}{p.phone_last4 ? ` (···${p.phone_last4})` : ""}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="lpn">Your WhatsApp number (with country code)</label>
+            <input id="lpn" className="input" inputMode="tel" placeholder="+92 300 1234567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+          <button className="btn small" disabled={patientId === "" || phone.replace(/\D/g, "").length < 7}>Link number</button>
+        </form>
+      )}
+      {linked && <p className="notice info" role="status" style={{ marginTop: 8 }}>{linked}</p>}
+    </section>
   );
 }

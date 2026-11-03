@@ -9,6 +9,9 @@ import type {
   Stats,
   TurnOut,
   WaitlistRow,
+  ChannelStatus,
+  Heard,
+  PatientRow,
 } from "./types";
 
 export class ApiError extends Error {
@@ -54,7 +57,19 @@ export const api = {
   config: () => request<Config>("/api/config"),
   startCall: (lang: "en" | "ur" = "en") => post<TurnOut>("/api/calls", { lang }),
   // `seq` = turns already seen; it makes a retried request safe (the server replays instead of re-processing).
-  turn: (callId: string, text: string, seq: number) => post<TurnOut>(`/api/calls/${callId}/turn`, { text, seq }),
+  turn: (callId: string, text: string, seq: number, asrConfidence?: number | null) =>
+    post<TurnOut>(`/api/calls/${callId}/turn`, { text, seq, ...(asrConfidence != null ? { asr_confidence: asrConfidence } : {}) }),
+  /** Audio in, text and a confidence number out. The assistant's rules still decide what to do with it. */
+  stt: async (callId: string, blob: Blob, lang: string): Promise<Heard> => {
+    let res: Response;
+    try {
+      res = await fetch(`/api/stt?call_id=${encodeURIComponent(callId)}&lang=${lang}`, { method: "POST", body: blob, headers: { "Content-Type": blob.type || "audio/webm" }, credentials: "same-origin" });
+    } catch {
+      throw new ApiError(0, "Can't reach the server. Check your connection and try again.");
+    }
+    if (!res.ok) throw new ApiError(res.status, res.status === 503 ? "Server speech recognition is not configured" : "Speech recognition failed");
+    return (await res.json()) as Heard;
+  },
   login: (username: string, password: string) => post<{ username: string; role: string }>("/api/auth/login", { username, password }),
   logout: () => post<{ ok: boolean }>("/api/auth/logout"),
   me: () => request<{ username: string; role: string }>("/api/auth/me"),
@@ -71,5 +86,8 @@ export const api = {
   replyAs: (id: number, text: string) => post<{ reply: string | null }>(`/api/staff/notifications/${id}/reply`, { text }),
   runReminders: (hours: number) => post<{ sent: number; expired: number }>("/api/staff/reminders/run", { hours }),
   waitlist: () => request<WaitlistRow[]>("/api/staff/waitlist"),
+  patients: () => request<PatientRow[]>("/api/staff/patients"),
+  linkPhone: (id: number, phone: string) => post<{ id: number; phone_last4: string }>(`/api/staff/patients/${id}/phone`, { phone }),
+  channels: () => request<ChannelStatus>("/api/staff/channels"),
   cancelWaitlist: (id: number) => post<{ id: number; status: string }>(`/api/staff/waitlist/${id}/cancel`),
 };
