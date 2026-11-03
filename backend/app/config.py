@@ -61,6 +61,23 @@ class Settings(BaseSettings):
     asr_min_confidence: float = 0.55  # below this the assistant reads back what it heard before acting
     stt_max_bytes: int = 5_000_000
     fake_stt_text: str = "what time do you open"
+    # --- knowledge layer: search and graph. Everything here is optional; without it the app uses its own BM25. ---
+    elasticsearch_url: str | None = None  # e.g. http://localhost:9200
+    elasticsearch_api_key: str | None = None
+    es_index_prefix: str = "clinic"
+    es_urdu_analyzer: str = "urdu_custom"  # standard | arabic | persian | urdu_custom (see docs/RETRIEVAL_EVAL.md)
+    dense_enabled: bool = False  # multilingual embeddings + hybrid fusion (downloads a ~220 MB model on first use)
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    neo4j_uri: str | None = None  # e.g. bolt://localhost:7687 or neo4j+s://<id>.databases.neo4j.io
+    neo4j_user: str = "neo4j"
+    neo4j_password: str | None = None
+    # --- agent brain (LangGraph + an LLM). "rules" keeps the deterministic engine. ---
+    brain: str = "rules"  # rules | agent
+    llm_provider: str = "none"  # none | groq | ollama | openai | fake
+    llm_model: str | None = None
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
+    agent_max_steps: int = 6
     background_enabled: bool = True  # expire waitlist offers / send reminders every minute
     reminders_enabled: bool = False
     reminder_hours: int = 24

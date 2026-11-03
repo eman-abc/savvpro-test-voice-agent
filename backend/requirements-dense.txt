@@ -1,0 +1,5 @@
+# Optional: multilingual embeddings for dense / hybrid retrieval (DENSE_ENABLED=true) and the full evaluation.
+# Adds ONNX Runtime (about 100 MB) and downloads a ~220 MB model on first use, so it is not in the default image.
+-r requirements.txt
+fastembed==0.9.1
+numpy==2.5.4

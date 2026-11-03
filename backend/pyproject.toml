@@ -5,7 +5,10 @@ requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["e2e: real-browser tests (run with: pytest e2e)"]
+markers = [
+  "e2e: real-browser tests (run with: pytest e2e)",
+  "integration: needs real Elasticsearch / Neo4j (set TEST_ELASTICSEARCH_URL / TEST_NEO4J_URI; skipped otherwise)",
+]
 addopts = "-ra"
 filterwarnings = ["ignore::DeprecationWarning", "ignore:Using `httpx` with `starlette.testclient`"]
 
