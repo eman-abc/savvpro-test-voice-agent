@@ -937,3 +937,12 @@ def to_canonical(text: str, names: dict[str, str] | None = None) -> str:
     elif "hours" in s or "address" in s or "parking" in s or "insurance" in s or "services" in s or "policy" in s:
         text_out = f"what {text_out}"
     return re.sub(r"\s+", " ", f"{text_out} {' '.join(extra)}").strip()
+
+
+_DIACRITICS = re.compile("[\u064b-\u065f\u0670\u0640]")  # Arabic-script vowel marks and tatweel
+_VARIANTS = str.maketrans({"ي": "ی", "ى": "ی", "ك": "ک", "ة": "ہ", "ۃ": "ہ", "ۂ": "ہ", "ه": "ہ"})
+
+
+def fold_urdu(text: str) -> str:
+    """Canonical Urdu letter forms and no vowel marks (Arabic kaf/yeh/heh typed on an Arabic keyboard become the Urdu letters)."""
+    return _DIACRITICS.sub("", text).translate(_VARIANTS)

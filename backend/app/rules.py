@@ -104,6 +104,7 @@ class ClinicRules(BaseModel):
     services: list[Service]
     providers: list[Provider]
     emergency_keywords: list[str]
+    emergency_keywords_ur: list[str] = []
     faq: list[FaqEntry]
 
     @model_validator(mode="after")

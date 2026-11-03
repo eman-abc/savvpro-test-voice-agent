@@ -138,6 +138,33 @@ emergency_keywords:
   - "allergic reaction"
   - "911"
   - "emergency"
+  - "not breathing"
+  - "stopped breathing"
+  - "chest tight"
+  - "passed out"
+  - "fainted"
+  - "collapsed"
+  - "seizure"
+  - "choking"
+
+# Urdu-script keywords. Words match by prefix and several words match by proximity, so "سینے میں شدید درد" (severe chest pain) is caught
+# even though an adjective sits between the words.
+emergency_keywords_ur:
+  - "سین درد"
+  - "سانس نہیں"
+  - "سانس مشکل"
+  - "بے ہوش"
+  - "بیہوش"
+  - "دل دورہ"
+  - "فالج"
+  - "خودکشی"
+  - "خود کشی"
+  - "شدید خون"
+  - "خون بہہ"
+  - "ہنگامی"
+  - "ایمرجنسی"
+  - "الرجی شدید"
+  - "تشنج"
 
 faq:
   - id: hours

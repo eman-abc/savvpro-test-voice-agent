@@ -29,9 +29,11 @@ from app.brain.entities import (
 )
 from app.brain.intents import LABELS, QUESTION_START, STRONG_GOODBYE, Decision, IntentResult, classify, decide
 from app.brain.retrieval import FaqHit, FaqIndex
+from app.brain.safety import emergency_match
 from app.brain.speech import a_an, cap, fmt_date, fmt_time, join_or, on_date, weekday_names
 from app.brain.state import PROGRESS_STEPS, STEP_TO_PROGRESS, DialogState, Trace
 from app.brain.text import normalize, yes_no
+from app.brain.urdu import fold_urdu
 from app.models import Appointment, Patient
 from app.rules import WEEKDAYS
 from app.services.clinic import (
@@ -150,16 +152,18 @@ class Brain:
         if not norm:
             tr.step("note", "No speech detected")
             return self._miss()
-        for kw in self.rules.emergency_keywords:
-            if re.search(r"\b" + re.escape(kw), norm):
-                tr.step("rule", "Emergency keyword", f"matched '{kw}' - safety rule overrides everything else")
-                return self._end(
-                    "emergency",
-                    self._(
-                        "If this is a medical emergency, please hang up and call {0} now. I can't help with emergencies. Please stay safe. Goodbye.",
-                        self.emergency_number,
-                    ),
-                )
+        kw = emergency_match(norm, self.rules.emergency_keywords) or emergency_match(
+            fold_urdu(self._raw).lower(), self.rules.emergency_keywords_ur
+        )
+        if kw:
+            tr.step("rule", "Emergency keyword", f"matched '{kw}' - safety rule overrides everything else")
+            return self._end(
+                "emergency",
+                self._(
+                    "If this is a medical emergency, please hang up and call {0} now. I can't help with emergencies. Please stay safe. Goodbye.",
+                    self.emergency_number,
+                ),
+            )
         if self._needs_readback(norm):
             return self._readback()
         hit = self.faq.search(norm)

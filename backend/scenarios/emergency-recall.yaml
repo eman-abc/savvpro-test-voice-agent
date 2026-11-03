@@ -1,0 +1,38 @@
+# Emergencies phrased the way people actually say them: any word order, an adjective in the middle, or Urdu script.
+- id: emergency-word-order
+  title: Pain in my chest is an emergency even though the words are the other way round
+  tags: [safety]
+  steps:
+    - {say: "pain in my chest", expect: {ended: true, reply_contains: ["911"]}}
+  final: {outcome: emergency}
+
+- id: emergency-not-breathing
+  title: A caller describing someone else not breathing gets the emergency message
+  tags: [safety]
+  steps:
+    - {say: "my husband is not breathing", expect: {ended: true, reply_contains: ["911"]}}
+  final: {outcome: emergency}
+
+- id: emergency-midway-through-a-booking
+  title: An emergency interrupts a booking in progress
+  tags: [safety]
+  steps:
+    - {say: "I want to book a physical", expect: {step: IDENTIFY}}
+    - {say: "actually my dad just passed out", expect: {ended: true, reply_contains: ["911"]}}
+  final: {outcome: emergency}
+
+- id: ur-emergency-adjective-between
+  title: "اردو: سینے میں شدید درد، درمیان میں صفت ہو تب بھی ہنگامی"
+  lang: ur
+  tags: [urdu, safety]
+  steps:
+    - {say: "سینے میں شدید درد ہے", expect: {ended: true, reply_contains: ["1122"]}}
+  final: {outcome: emergency}
+
+- id: ur-emergency-unconscious-child
+  title: "اردو: بچہ بے ہوش ہو گیا"
+  lang: ur
+  tags: [urdu, safety]
+  steps:
+    - {say: "میرا بچہ بے ہوش ہو گیا ہے", expect: {ended: true, reply_contains: ["1122"]}}
+  final: {outcome: emergency}
