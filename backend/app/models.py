@@ -220,3 +220,19 @@ class ProcessedMessage(Base):
     __tablename__ = "processed_messages"
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     received_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class KnowledgeDoc(Base):
+    """What the ingestion pipeline last loaded: lets it skip unchanged documents and remove deleted ones, and lets the
+    search and graph projections be rebuilt from SQL at any time."""
+
+    __tablename__ = "knowledge_docs"
+    doc_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    base_id: Mapped[str] = mapped_column(String(60), index=True)
+    kind: Mapped[str] = mapped_column(String(12))
+    lang: Mapped[str] = mapped_column(String(2))
+    checksum: Mapped[str] = mapped_column(String(16))
+    title: Mapped[str] = mapped_column(String(200))
+    text: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(120))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
