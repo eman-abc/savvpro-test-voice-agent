@@ -104,6 +104,9 @@ def test_unknown_user_gets_same_error_as_wrong_password(client):
 
 def test_tampered_token_is_rejected(client):
     login(client)
+    client.cookies.delete(
+        "clinic_session"
+    )  # replace the cookie; setting a second one makes the winner depend on the HTTP client's ordering
     client.cookies.set("clinic_session", "not.a.jwt")
     assert client.get("/api/auth/me").status_code == 401
 

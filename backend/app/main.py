@@ -19,12 +19,17 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app import models as m
+from app.agent.llm import make_chat_model
 from app.api import auth, calls, messages, speech, staff, whatsapp
 from app.api.deps import AppContext, client_ip, make_service
 from app.brain.retrieval import FaqIndex
 from app.channels.whatsapp import WhatsAppClient
 from app.config import Settings, get_settings
 from app.db import Database, startup_lock
+from app.knowledge.docs import build_documents
+from app.knowledge.graph import build_graph_spec, make_graph
+from app.knowledge.rag import KnowledgeService
+from app.knowledge.search import make_search
 from app.logging_config import configure_logging
 from app.metrics import Metrics
 from app.migrate import upgrade as run_migrations
@@ -56,12 +61,21 @@ def _init_sentry(settings: Settings) -> None:
         log.warning("SENTRY_DSN is set but sentry-sdk is not installed")
 
 
-def create_app(settings: Settings | None = None, http_transport: httpx.BaseTransport | None = None) -> FastAPI:
-    """`http_transport` lets tests replace the network (Graph API, Deepgram) with a fake."""
+def create_app(
+    settings: Settings | None = None, http_transport: httpx.BaseTransport | None = None, llm: object | None = None
+) -> FastAPI:
+    """`http_transport` lets tests replace the network (Graph API, Deepgram) with a fake; `llm` injects a chat model (tests)."""
     settings = settings or get_settings()
     configure_logging(settings.log_level)
     rules = load_rules(settings.rules_path)
     db = Database(settings)
+    kdocs = build_documents(rules)
+    knowledge = KnowledgeService(
+        kdocs, make_search(settings, kdocs), make_graph(settings, build_graph_spec(rules, kdocs))
+    )
+    chat_model = llm if llm is not None else (make_chat_model(settings) if settings.brain == "agent" else None)
+    if settings.brain == "agent" and chat_model is None:
+        log.warning("BRAIN=agent but no LLM is configured (LLM_PROVIDER / LLM_MODEL); using the rules engine")
     ctx = AppContext(
         settings=settings,
         db=db,
@@ -72,6 +86,8 @@ def create_app(settings: Settings | None = None, http_transport: httpx.BaseTrans
         metrics=Metrics(),
         stt=make_stt(settings, http_transport),
         whatsapp=WhatsAppClient.from_settings(settings, http_transport) if settings.whatsapp_enabled else None,
+        knowledge=knowledge,
+        llm=chat_model,
     )
     _init_sentry(settings)
 
@@ -181,7 +197,7 @@ def create_app(settings: Settings | None = None, http_transport: httpx.BaseTrans
     @app.get("/api/version", tags=["public"])
     def version() -> dict:
         return {
-            "version": "1.3.0",
+            "version": "1.4.0",
             "commit": os.environ.get("GIT_SHA") or os.environ.get("RENDER_GIT_COMMIT") or "dev",
             "built": os.environ.get("BUILD_TIME", "unknown"),
         }

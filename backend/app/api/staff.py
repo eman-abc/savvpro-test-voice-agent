@@ -300,3 +300,50 @@ def channels(ctx: AppContext = Depends(get_ctx)) -> dict:
         },
         "speech_to_text": {"provider": s.stt_provider if ctx.stt else "browser"},
     }
+
+
+# ---------------------------------------------------------------- knowledge: search, graph, call insights
+@router.get("/knowledge/status")
+def knowledge_status(ctx: AppContext = Depends(get_ctx)) -> dict:
+    return ctx.knowledge.status()  # type: ignore[union-attr]
+
+
+@router.get("/knowledge/search")
+def knowledge_search(
+    q: str = Query(min_length=1, max_length=200),
+    lang: str = "en",
+    k: int = Query(default=3, ge=1, le=8),
+    ctx: AppContext = Depends(get_ctx),
+) -> dict:
+    """Search with provenance and graph expansion (GraphRAG-style): each result says where it came from and what it is connected to."""
+    return ctx.knowledge.ask(q, lang if lang in ("en", "ur") else "en", k)  # type: ignore[union-attr]
+
+
+@router.get("/knowledge/insights")
+def knowledge_insights(
+    outcome: str = Query(default="handoff", pattern="^[a-z_]{3,20}$"),
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_ctx),
+) -> dict:
+    """What callers said in calls that ended a given way. Elasticsearch aggregations when available, the same maths in Python otherwise."""
+    from app.knowledge.transcripts import calls_from_sql, insights_in_python
+
+    index = getattr(ctx.knowledge, "calls", None)
+    if index is not None:
+        try:
+            return index.insights(outcome)
+        except Exception:  # noqa: BLE001 - not indexed yet or the cluster is down
+            pass
+    return insights_in_python(calls_from_sql(db), outcome)
+
+
+@router.post("/knowledge/reindex", dependencies=[Depends(require_admin)])
+def knowledge_reindex(
+    calls: int = Query(default=0, ge=0, le=2000), db: Session = Depends(get_db), ctx: AppContext = Depends(get_ctx)
+) -> dict:
+    from app.knowledge.ingest import IngestError, ingest
+
+    try:
+        return ingest(ctx.settings, db, ctx.rules, calls=calls).as_dict()
+    except IngestError as exc:
+        raise HTTPException(422, {"refused": exc.problems}) from None

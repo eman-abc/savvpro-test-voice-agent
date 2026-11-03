@@ -33,6 +33,8 @@ class AppContext:
     metrics: Metrics
     stt: object | None = None  # app.speech.stt.SpeechToText
     whatsapp: object | None = None  # app.channels.whatsapp.WhatsAppClient
+    knowledge: object | None = None  # app.knowledge.rag.KnowledgeService
+    llm: object | None = None  # a LangChain chat model, only when BRAIN=agent
 
 
 def get_ctx(request: Request) -> AppContext:

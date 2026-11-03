@@ -37,7 +37,8 @@ def make_settings(**over) -> Settings:
 
 @pytest.fixture
 def rules():
-    return load_rules(RULES_PATH)
+    """A private copy per test: some tests change a policy or drop a FAQ, and must not leak that into other tests."""
+    return load_rules(RULES_PATH).model_copy(deep=True)
 
 
 @pytest.fixture
