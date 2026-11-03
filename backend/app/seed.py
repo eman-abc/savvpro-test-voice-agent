@@ -51,7 +51,7 @@ def public_demo_hints() -> list[dict[str, str]]:
     return [
         {
             "name": f"{first} {last}",
-            "dob": dob.strftime("%B %-d, %Y"),
+            "dob": f"{dob:%B} {dob.day}, {dob.year}",  # portable: strftime's no-padding flag is Linux-only and crashes on Windows
             "note": notes[first],
         }
         for first, last, dob, _phone, _est in DEMO_PATIENTS
@@ -160,6 +160,8 @@ def reset_demo(svc: ClinicService) -> None:
     """Wipe appointments, calls and patients, then re-seed. Admin-only (demo mode)."""
     db = svc.db
     for model in (
+        m.ProcessedMessage,
+        m.WhatsAppContact,
         m.Notification,
         m.WaitlistEntry,
         m.CallTurn,
@@ -178,8 +180,22 @@ def reset_demo(svc: ClinicService) -> None:
 def purge_old_calls(db: Session, hours: int) -> int:
     cutoff = m.utcnow() - timedelta(hours=hours)
     old = list(db.scalars(select(m.CallSession.id).where(m.CallSession.started_at < cutoff)))
+    db.execute(delete(m.ProcessedMessage).where(m.ProcessedMessage.received_at < cutoff))
     if old:
         db.execute(delete(m.CallTurn).where(m.CallTurn.call_id.in_(old)))
         db.execute(delete(m.CallSession).where(m.CallSession.id.in_(old)))
         db.commit()
     return len(old)
+
+
+def link_demo_whatsapp(db: Session, settings: Settings) -> None:
+    """Point one demo patient at the tester's own WhatsApp number (from env vars; never stored in the repository)."""
+    digits = "".join(c for c in (settings.demo_whatsapp_number or "") if c.isdigit())
+    if not digits:
+        return
+    first, _, last = settings.demo_whatsapp_patient.partition(" ")
+    p = db.scalar(select(m.Patient).where(m.Patient.first_name == first, m.Patient.last_name == last))
+    if p is not None:
+        p.phone = digits
+        db.commit()
+        log.info("demo patient %s linked to a WhatsApp number ending %s", p.first_name, digits[-4:])

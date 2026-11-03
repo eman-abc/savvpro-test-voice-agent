@@ -101,6 +101,8 @@ class CallSession(Base):
     state_json: Mapped[str] = mapped_column(Text, default="{}")
     handoff_summary: Mapped[str | None] = mapped_column(Text)
     turn_count: Mapped[int] = mapped_column(Integer, default=0)
+    channel: Mapped[str] = mapped_column(String(12), default="web", server_default="web")  # web | whatsapp
+    contact: Mapped[str | None] = mapped_column(String(20), index=True)  # WhatsApp number (digits)
 
     turns: Mapped[list[CallTurn]] = relationship(
         back_populates="call", cascade="all, delete-orphan", order_by="CallTurn.idx"
@@ -196,5 +198,25 @@ class Notification(Base):
     status: Mapped[str] = mapped_column(String(16), default="sent", index=True)
     replied_at: Mapped[datetime | None] = mapped_column(DateTime)
     reply_text: Mapped[str | None] = mapped_column(Text)
+    external_id: Mapped[str | None] = mapped_column(String(100), index=True)  # provider message id (wamid...)
+    delivery: Mapped[str | None] = mapped_column(String(12))  # sent | delivered | read | failed (from the provider)
+    error: Mapped[str | None] = mapped_column(String(200))
 
     patient: Mapped[Patient] = relationship()
+
+
+class WhatsAppContact(Base):
+    """When each number last wrote to us: WhatsApp allows free-form replies only for 24 hours after that."""
+
+    __tablename__ = "whatsapp_contacts"
+    phone: Mapped[str] = mapped_column(String(20), primary_key=True)
+    last_inbound_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ProcessedMessage(Base):
+    """Provider message ids we have already handled: the provider retries webhooks, so we must not act twice."""
+
+    __tablename__ = "processed_messages"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)

@@ -42,6 +42,25 @@ class Settings(BaseSettings):
     use_migrations: bool = False  # run Alembic at start-up instead of create_all (set true in prod)
     metrics_token: str | None = None  # bearer token for /metrics; unset = open in dev, disabled in prod
     sentry_dsn: str | None = None
+    # --- WhatsApp (Meta Cloud API). The channel is enabled only when all four credentials are set. ---
+    whatsapp_verify_token: str | None = None  # you choose it; Meta echoes it back during webhook set-up
+    whatsapp_app_secret: str | None = None  # signs every webhook call (X-Hub-Signature-256)
+    whatsapp_access_token: str | None = None  # System User token (the temporary one expires in 24 hours)
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_api_version: str = "v21.0"
+    whatsapp_graph_base: str = "https://graph.facebook.com"
+    whatsapp_allowed_numbers: str = ""  # comma-separated digits; empty = anyone who can reach the number
+    whatsapp_template_name: str | None = None  # approved template used when the 24-hour window is closed
+    demo_whatsapp_number: str | None = None  # links the demo patient below to YOUR number at start-up (never committed)
+    demo_whatsapp_patient: str = "Wei Zhang"
+    # --- speech-to-text (pretrained model behind an interface; the browser recogniser is the fallback) ---
+    stt_provider: str = "none"  # none | deepgram | fake (fake is for tests and demos without a key)
+    deepgram_api_key: str | None = None
+    deepgram_model: str = "nova-3"
+    deepgram_base: str = "https://api.deepgram.com"
+    asr_min_confidence: float = 0.55  # below this the assistant reads back what it heard before acting
+    stt_max_bytes: int = 5_000_000
+    fake_stt_text: str = "what time do you open"
     background_enabled: bool = True  # expire waitlist offers / send reminders every minute
     reminders_enabled: bool = False
     reminder_hours: int = 24
@@ -52,6 +71,16 @@ class Settings(BaseSettings):
     fixed_now: str | None = None  # test-only clock override, honoured only when APP_ENV=test
 
     @model_validator(mode="after")
+    def _check_speech(self) -> "Settings":
+        if self.stt_provider == "deepgram" and not self.deepgram_api_key:
+            raise ValueError("STT_PROVIDER=deepgram needs DEEPGRAM_API_KEY")
+        if self.stt_provider not in ("none", "deepgram", "fake"):
+            raise ValueError("STT_PROVIDER must be none, deepgram or fake")
+        if self.app_env == "prod" and self.stt_provider == "fake":
+            raise ValueError("STT_PROVIDER=fake is not allowed in prod")
+        return self
+
+    @model_validator(mode="after")
     def _check_prod(self) -> "Settings":
         if self.app_env == "prod":
             if self.jwt_secret == _INSECURE_DEFAULT_SECRET or len(self.jwt_secret) < 24:
@@ -59,6 +88,21 @@ class Settings(BaseSettings):
             if not self.demo_mode and self.staff_password == "demo-staff-2026":
                 raise ValueError("STAFF_PASSWORD must be changed when DEMO_MODE=false")
         return self
+
+    @property
+    def whatsapp_enabled(self) -> bool:
+        return all(
+            (
+                self.whatsapp_verify_token,
+                self.whatsapp_app_secret,
+                self.whatsapp_access_token,
+                self.whatsapp_phone_number_id,
+            )
+        )
+
+    @property
+    def whatsapp_allowed(self) -> set[str]:
+        return {d for n in self.whatsapp_allowed_numbers.split(",") if (d := "".join(c for c in n if c.isdigit()))}
 
     @property
     def cors_list(self) -> list[str]:

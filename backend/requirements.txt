@@ -9,3 +9,4 @@ bcrypt==5.0.0
 PyJWT==2.15.1
 psycopg[binary]==3.3.6
 alembic==1.20.1
+httpx==0.28.1
