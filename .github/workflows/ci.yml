@@ -82,3 +82,40 @@ jobs:
           docker run -d --name app -p 8000:8000 -e JWT_SECRET=ci-secret-0123456789abcdef0123456789 clinic-voice-agent # gitleaks:allow
           for i in $(seq 1 30); do curl -fs localhost:8000/readyz && exit 0; sleep 1; done
           docker logs app; exit 1
+
+  integration:
+    # The same tests, but against REAL Elasticsearch and Neo4j (service containers): search analyzers, Cypher parity with the in-memory
+    # graph, and the whole ingestion pipeline. Everything else in the suite runs without them.
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:9.5.1
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          xpack.ml.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports: ["9200:9200"]
+        options: >-
+          --health-cmd "curl -fs http://localhost:9200/_cluster/health"
+          --health-interval 10s --health-timeout 5s --health-retries 30
+      neo4j:
+        image: neo4j:5.26-community
+        env:
+          NEO4J_AUTH: none  # a throw-away container on the runner: nothing to protect, and no password string in the repository
+        ports: ["7687:7687"]
+        options: >-
+          --health-cmd "cypher-shell 'RETURN 1'"
+          --health-interval 10s --health-timeout 10s --health-retries 30
+    env:
+      TEST_ELASTICSEARCH_URL: http://localhost:9200
+      TEST_NEO4J_URI: bolt://localhost:7687
+      TEST_NEO4J_PASSWORD: unused-auth-is-off
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: backend/requirements-dev.txt }
+      - run: pip install -r requirements-dev.txt
+      - run: pytest tests -m integration -v
+

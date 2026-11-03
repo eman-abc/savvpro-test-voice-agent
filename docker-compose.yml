@@ -27,9 +27,47 @@ services:
       DEMO_MODE: "true"
       TRUSTED_PROXY_COUNT: "0"
       METRICS_TOKEN: local-metrics-token   # GET /metrics with "Authorization: Bearer local-metrics-token"
+      # Optional knowledge layer. Empty means "off": the app then uses its own BM25 and an in-memory graph.
+      #   docker compose --profile knowledge up --build   with  ELASTICSEARCH_URL=http://elasticsearch:9200
+      #                                                          NEO4J_URI=bolt://neo4j:7687  NEO4J_PASSWORD=localdevpassword
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+      NEO4J_URI: ${NEO4J_URI:-}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-}
+      BRAIN: ${BRAIN:-rules}                  # rules | agent (the agent also needs LLM_PROVIDER and LLM_MODEL)
+      LLM_PROVIDER: ${LLM_PROVIDER:-none}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
 
+  # ---- optional: `docker compose --profile knowledge up`. LOCAL DEVELOPMENT ONLY: Elasticsearch security is switched off here.
+  elasticsearch:
+    profiles: ["knowledge"]
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.1
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.ml.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports: ["9200:9200"]
+    volumes: [esdata:/usr/share/elasticsearch/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  neo4j:
+    profiles: ["knowledge"]
+    image: neo4j:5.26-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-localdevpassword}
+      NEO4J_server_memory_heap_max__size: 512m
+    ports: ["7474:7474", "7687:7687"]   # 7474 is the browser UI
+    volumes: [neo4jdata:/data]
+
 volumes:
   pgdata:
+  esdata:
+  neo4jdata:
