@@ -1,0 +1,419 @@
+# Labelled retrieval queries. Written by the project author against the 27 facts in the knowledge base, so they are
+# optimistic: the same person wrote the documents. Treat results as a pipeline demonstration; replace with real, held-out
+# caller queries (and have a native Urdu speaker review the Urdu rows) before drawing conclusions.
+# tier: direct = shares words with the answer | paraphrase = little overlap | urdu = Urdu script | roman = Roman Urdu
+- q: what are your opening hours
+  lang: en
+  tier: direct
+  rel:
+  - faq:hours
+- q: where is the clinic located
+  lang: en
+  tier: direct
+  rel:
+  - faq:location
+- q: is there parking
+  lang: en
+  tier: direct
+  rel:
+  - faq:parking
+- q: what should I bring to my visit
+  lang: en
+  tier: direct
+  rel:
+  - faq:bring
+- q: how early should I arrive
+  lang: en
+  tier: direct
+  rel:
+  - faq:arrive
+  - policy:arrive_early
+- q: what is your cancellation policy
+  lang: en
+  tier: direct
+  rel:
+  - faq:cancellation
+  - policy:cancel_notice
+- q: are you accepting new patients
+  lang: en
+  tier: direct
+  rel:
+  - faq:new_patients
+  - service:new_patient_visit
+- q: which insurance do you accept
+  lang: en
+  tier: direct
+  rel:
+  - faq:insurance
+- q: what services do you offer
+  lang: en
+  tier: direct
+  rel:
+  - faq:services
+- q: what is your phone number
+  lang: en
+  tier: direct
+  rel:
+  - faq:phone
+- q: how long is an annual physical
+  lang: en
+  tier: direct
+  rel:
+  - service:annual_physical
+- q: do you offer vaccinations
+  lang: en
+  tier: direct
+  rel:
+  - service:vaccination
+- q: who is Dr. Patel
+  lang: en
+  tier: direct
+  rel:
+  - provider:patel
+- q: what do you do for lab work
+  lang: en
+  tier: direct
+  rel:
+  - service:lab_work
+- q: when can I come in on a Saturday
+  lang: en
+  tier: paraphrase
+  rel:
+  - faq:hours
+  - provider:kim
+- q: can I drive there and leave my car
+  lang: en
+  tier: paraphrase
+  rel:
+  - faq:parking
+- q: do I need to carry any paperwork or ID
+  lang: en
+  tier: paraphrase
+  rel:
+  - faq:bring
+- q: I am running twenty minutes late will they still see me
+  lang: en
+  tier: paraphrase
+  rel:
+  - policy:late_arrival
+- q: will I be charged if I change my appointment tomorrow
+  lang: en
+  tier: paraphrase
+  rel:
+  - policy:cancel_notice
+  - faq:cancellation
+- q: can I book something for later today
+  lang: en
+  tier: paraphrase
+  rel:
+  - policy:min_lead
+- q: how far in advance can I schedule
+  lang: en
+  tier: paraphrase
+  rel:
+  - policy:max_advance
+- q: why do you ask for my birth date
+  lang: en
+  tier: paraphrase
+  rel:
+  - policy:verification
+- q: is the clinic open on Christmas
+  lang: en
+  tier: paraphrase
+  rel:
+  - policy:holidays
+  - faq:hours
+- q: I think I am having a heart attack
+  lang: en
+  tier: paraphrase
+  rel:
+  - policy:emergency
+- q: I have a cough and a fever who can see me
+  lang: en
+  tier: paraphrase
+  rel:
+  - service:general_consultation
+- q: I need a flu jab
+  lang: en
+  tier: paraphrase
+  rel:
+  - service:vaccination
+- q: I am new here and want to register
+  lang: en
+  tier: paraphrase
+  rel:
+  - faq:new_patients
+  - service:new_patient_visit
+- q: which nurse can draw my blood
+  lang: en
+  tier: paraphrase
+  rel:
+  - service:lab_work
+  - provider:kim
+- q: who works on Mondays
+  lang: en
+  tier: paraphrase
+  rel:
+  - provider:patel
+  - provider:nguyen
+- q: which doctor does internal medicine
+  lang: en
+  tier: paraphrase
+  rel:
+  - provider:nguyen
+- q: a follow up about my blood pressure medication
+  lang: en
+  tier: paraphrase
+  rel:
+  - service:follow_up
+- q: yearly check up with a doctor
+  lang: en
+  tier: paraphrase
+  rel:
+  - service:annual_physical
+- q: do you take Blue Cross
+  lang: en
+  tier: paraphrase
+  rel:
+  - faq:insurance
+- q: what number do I call to reach the front desk
+  lang: en
+  tier: paraphrase
+  rel:
+  - faq:phone
+- q: give me your street address
+  lang: en
+  tier: paraphrase
+  rel:
+  - faq:location
+- q: what kinds of appointments can I book
+  lang: en
+  tier: paraphrase
+  rel:
+  - faq:services
+- q: how many minutes before my visit should I get there as a new patient
+  lang: en
+  tier: paraphrase
+  rel:
+  - policy:arrive_early
+  - faq:arrive
+- q: آپ کے کھلنے کے اوقات کیا ہیں
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:hours
+- q: کلینک کہاں ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:location
+- q: کیا گاڑی کھڑی کرنے کی جگہ ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:parking
+- q: ملاقات پر کیا ساتھ لانا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:bring
+- q: کتنی جلدی پہنچنا چاہیے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:arrive
+  - policy:arrive_early
+- q: اپائنٹمنٹ منسوخ کرنے کی پالیسی کیا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:cancellation
+  - policy:cancel_notice
+- q: کیا نئے مریض لیے جا رہے ہیں
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:new_patients
+  - service:new_patient_visit
+- q: کون سی انشورنس قبول کرتے ہیں
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:insurance
+- q: آپ کون سی خدمات دیتے ہیں
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:services
+- q: آپ کا فون نمبر کیا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:phone
+- q: کل منسوخ کروں تو کیا فیس لگے گی
+  lang: ur
+  tier: urdu
+  rel:
+  - policy:cancel_notice
+  - faq:cancellation
+- q: اگر میں بیس منٹ دیر سے آؤں تو
+  lang: ur
+  tier: urdu
+  rel:
+  - policy:late_arrival
+- q: کیا آج ہی کے لیے بکنگ ہو سکتی ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - policy:min_lead
+- q: کتنے دن پہلے بکنگ کر سکتا ہوں
+  lang: ur
+  tier: urdu
+  rel:
+  - policy:max_advance
+- q: آپ میری تاریخ پیدائش کیوں پوچھتے ہیں
+  lang: ur
+  tier: urdu
+  rel:
+  - policy:verification
+- q: کیا عید کی چھٹی میں کلینک کھلا ہوتا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - policy:holidays
+  - faq:hours
+- q: سینے میں شدید درد ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - policy:emergency
+- q: کھانسی اور بخار ہے کس سے ملوں
+  lang: ur
+  tier: urdu
+  rel:
+  - service:general_consultation
+- q: ٹیکہ لگوانا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - service:vaccination
+- q: نیا مریض ہوں رجسٹریشن کرنی ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:new_patients
+  - service:new_patient_visit
+- q: خون کا ٹیسٹ کہاں ہوتا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - service:lab_work
+- q: ڈاکٹر پٹیل کب بیٹھتی ہیں
+  lang: ur
+  tier: urdu
+  rel:
+  - provider:patel
+- q: کون سا ڈاکٹر اندرونی امراض دیکھتا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - provider:nguyen
+- q: ہفتے کے دن کون دستیاب ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - provider:kim
+- q: سالانہ چیک اپ کتنا لمبا ہوتا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - service:annual_physical
+- q: فالو اپ وزٹ کتنی دیر کی ہوتی ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - service:follow_up
+- q: کلینک کب کھلتا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:hours
+- q: ہفتے کو کلینک کھلتا ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:hours
+  - provider:kim
+- q: پارکنگ کہاں کرنی ہے
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:parking
+- q: کلینک کا پتہ بتائیں
+  lang: ur
+  tier: urdu
+  rel:
+  - faq:location
+- q: clinic kab khulta hai
+  lang: ro
+  tier: roman
+  rel:
+  - faq:hours
+- q: parking kahan hai
+  lang: ro
+  tier: roman
+  rel:
+  - faq:parking
+- q: appointment cancel karni hai kya fees lagegi
+  lang: ro
+  tier: roman
+  rel:
+  - policy:cancel_notice
+  - faq:cancellation
+- q: flu ka tika lagwana hai
+  lang: ro
+  tier: roman
+  rel:
+  - service:vaccination
+- q: kitni jaldi pahunchna hai
+  lang: ro
+  tier: roman
+  rel:
+  - faq:arrive
+  - policy:arrive_early
+- q: naya mareez hun registration chahiye
+  lang: ro
+  tier: roman
+  rel:
+  - faq:new_patients
+  - service:new_patient_visit
+- q: insurance kaunsi chalti hai
+  lang: ro
+  tier: roman
+  rel:
+  - faq:insurance
+- q: phone number kya hai aapka
+  lang: ro
+  tier: roman
+  rel:
+  - faq:phone
+- q: blood test kahan hota hai
+  lang: ro
+  tier: roman
+  rel:
+  - service:lab_work
+- q: saturday ko kaun doctor hai
+  lang: ro
+  tier: roman
+  rel:
+  - provider:kim
+- q: late ho gaya to kya hoga
+  lang: ro
+  tier: roman
+  rel:
+  - policy:late_arrival
+- q: kya aaj ke liye booking ho sakti hai
+  lang: ro
+  tier: roman
+  rel:
+  - policy:min_lead
