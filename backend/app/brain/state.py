@@ -17,6 +17,7 @@ STEP_TO_PROGRESS = {
     "OFFER": 2,
     "CONFIRM": 3,
     "WAITLIST": 2,
+    "HEARD": 2,
     "MORE": 4,
     "ENDED": 4,
 }

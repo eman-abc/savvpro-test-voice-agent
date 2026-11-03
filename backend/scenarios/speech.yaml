@@ -1,0 +1,36 @@
+- id: speech-unsure-is-read-back-then-confirmed
+  title: Unsure speech recognition is read back, and a "yes" proceeds with the original words
+  tags: [speech, safety]
+  steps:
+    - {say: "book a flu shot please", asr: 0.3, expect: {step: HEARD, reply_contains: ["I heard", "book a flu shot please"]}}
+    - {say: "yes", expect: {step: IDENTIFY, intent: book, slots: {}}}
+    - {say: "Wei Zhang, May 17th 1995", expect: {step: COLLECT, verified: true, reply_contains: ["vaccination"]}}
+
+- id: speech-unsure-and-wrong
+  title: A wrong transcript is rejected and the caller says it again
+  tags: [speech, corrections]
+  steps:
+    - {say: "book a flu shot please", asr: 0.25, expect: {step: HEARD}}
+    - {say: "no", expect: {step: ROUTE, reply_contains: ["say it again"]}}
+    - {say: "cancel my appointment", asr: 0.9, expect: {step: IDENTIFY, intent: cancel}}
+
+- id: speech-confident-passes-straight-through
+  title: Confident speech is not interrupted with a read-back
+  tags: [speech]
+  steps:
+    - {say: "book a flu shot please", asr: 0.93, expect: {step: IDENTIFY, intent: book}}
+
+- id: speech-emergency-ignores-low-confidence
+  title: An emergency is acted on even when recognition is unsure
+  tags: [speech, safety]
+  steps:
+    - {say: "I have chest pain", asr: 0.05, expect: {ended: true, reply_contains: ["911"]}}
+  final: {outcome: emergency}
+
+- id: ur-speech-unsure-read-back
+  title: "اردو: غیر یقینی تشخیص پر پہلے دہرایا جاتا ہے"
+  lang: ur
+  tags: [urdu, speech]
+  steps:
+    - {say: "مجھے فلو کا ٹیکہ چاہیے", asr: 0.3, expect: {step: HEARD, reply_contains: ["میں نے سنا"]}}
+    - {say: "جی ہاں", expect: {step: IDENTIFY, intent: book}}

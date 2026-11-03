@@ -142,6 +142,9 @@ UR: dict[str, str] = {
     "Please arrive {0} minutes early and bring a photo ID and your insurance card.": "براہ کرم {0} منٹ پہلے پہنچیں اور اپنا شناختی کارڈ اور انشورنس کارڈ ساتھ لائیں۔",
     "You're booked: {0}. {1} We ask for {2} hours' notice if you need to change it. Is there anything else I can help with?": "آپ کی اپائنٹمنٹ بک ہو گئی ہے: {0}۔ {1} اگر آپ کو اسے تبدیل کرنا ہو تو براہ کرم {2} گھنٹے پہلے اطلاع دیں۔ کیا میں آپ کی کسی اور چیز میں مدد کر سکتا ہوں؟",
     "Done. Your appointment is now {0}. {1} Is there anything else I can help with?": "ٹھیک ہے۔ آپ کی اپائنٹمنٹ اب {0} ہے۔ {1} کیا میں آپ کی کسی اور چیز میں مدد کر سکتا ہوں؟",
+    # ---- low-confidence speech
+    "I heard: “{0}”. Is that right?": "میں نے سنا: “{0}”۔ کیا یہ درست ہے؟",
+    "Sorry about that. Please say it again.": "معذرت۔ براہ کرم دوبارہ بتائیں۔",
     # ---- waitlist, silence
     "Would you like me to add you to the waitlist for {0}? I'll message you if a slot opens.": "کیا میں آپ کو {0} کے لیے ویٹنگ لسٹ میں شامل کر دوں؟ اگر کوئی وقت خالی ہوا تو میں آپ کو پیغام بھیجوں گا۔",
     "{0}{1} Would you like me to add you to the waitlist? I'll message you if a slot opens, or you can try a different day.": "{0}{1} کیا میں آپ کو ویٹنگ لسٹ میں شامل کر دوں؟ اگر کوئی وقت خالی ہوا تو میں آپ کو پیغام بھیجوں گا، یا آپ کوئی اور دن آزما سکتے ہیں۔",

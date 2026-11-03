@@ -69,6 +69,7 @@ HINTS = {
     "SELECT": "You can say 'the first one', or give me the date.",
     "MORE": "Please say yes or no, or tell me what you need.",
     "WAITLIST": "Please say yes or no.",
+    "HEARD": "Please say yes or no.",
     "CLARIFY": "Please tell me which of the two you would like.",
 }
 PAIR_TEXT = {
@@ -87,9 +88,19 @@ class TurnResult:
 
 
 class Brain:
-    def __init__(self, svc: ClinicService, faq: FaqIndex, actor: str, lock_failures: int = 5, lock_minutes: int = 15):
+    def __init__(
+        self,
+        svc: ClinicService,
+        faq: FaqIndex,
+        actor: str,
+        lock_failures: int = 5,
+        lock_minutes: int = 15,
+        asr_min: float = 0.55,
+    ):
         self.svc, self.rules, self.faq, self.actor = svc, svc.rules, faq, actor
-        self.lock_failures, self.lock_minutes = lock_failures, lock_minutes
+        self.lock_failures, self.lock_minutes, self.asr_min = lock_failures, lock_minutes, asr_min
+        self.asr: float | None = None  # speech-recognition confidence for this turn (None for typed text)
+        self._raw = ""
         self.st = DialogState()
         self.tr = Trace(0, "", "")
         self.today = date.today()
@@ -107,17 +118,16 @@ class Brain:
         state.last_reply = reply
         return self._finish(reply, "ROUTE")
 
-    def handle(self, state: DialogState, text: str) -> TurnResult:
+    def handle(self, state: DialogState, text: str, asr_confidence: float | None = None) -> TurnResult:
         self.st = state
+        self.asr = asr_confidence
         self.today = self.svc.now().date()
         self._missed, self._appointment = False, None
         state.turn += 1
         prev = state.step
         text = (text or "").strip()[:500]
-        spoken_urdu = urdu.is_urdu(text)
-        if spoken_urdu and state.lang != "ur":
-            state.lang = "ur"  # the caller is speaking Urdu (or Roman Urdu): answer in Urdu
-        norm = normalize(urdu.to_canonical(text, state.ur_names) if spoken_urdu else text)
+        self._raw = text
+        norm, spoken_urdu = self._prepare(text)
         self.tr = Trace(state.turn, text, norm)
         if spoken_urdu:
             self.tr.step("note", "Urdu understood", "mapped to the same canonical vocabulary the English rules use")
@@ -150,6 +160,8 @@ class Brain:
                         self.emergency_number,
                     ),
                 )
+        if self._needs_readback(norm):
+            return self._readback()
         hit = self.faq.search(norm)
         res = classify(norm, hit.score if hit else 0.0)
         dec = decide(res)
@@ -264,6 +276,55 @@ class Brain:
 
     def a_an(self, phrase: str) -> str:
         return phrase if self.lang == "ur" else a_an(phrase)
+
+    def _prepare(self, text: str) -> tuple[str, bool]:
+        """Text as the rules see it: Urdu / Roman Urdu mapped to the canonical vocabulary, then normalised."""
+        spoken_urdu = urdu.is_urdu(text)
+        if spoken_urdu and self.st.lang != "ur":
+            self.st.lang = "ur"  # the caller is speaking Urdu (or Roman Urdu): answer in Urdu
+        return normalize(urdu.to_canonical(text, self.st.ur_names) if spoken_urdu else text), spoken_urdu
+
+    # ---------------------------------------------------------------- low-confidence speech ---
+    HEARD_STEPS = ("ROUTE", "IDENTIFY", "REGISTER", "COLLECT", "OFFER", "SELECT")
+
+    def _needs_readback(self, norm: str) -> bool:
+        """Speech recognition was unsure and the answer is free-form: confirm what we heard before acting on it."""
+        return (
+            self.asr is not None
+            and self.asr < self.asr_min
+            and self.st.step in self.HEARD_STEPS
+            and len(norm.split()) >= 2
+        )
+
+    def _readback(self) -> str:
+        st = self.st
+        st.pending = {"kind": "heard", "text": self._raw, "return_step": st.step, "saved": st.pending}
+        st.step = "HEARD"
+        self.tr.step(
+            "rule", "Low speech confidence", f"{self.asr:.2f} is below {self.asr_min}; reading back before acting"
+        )
+        return self._("I heard: “{0}”. Is that right?", self._raw)
+
+    def _step_heard(self, norm: str, dec: Decision, hit: FaqHit | None) -> str:
+        st = self.st
+        pend = st.pending
+        text = pend.get("text", "")
+
+        def restore() -> None:
+            st.step, st.pending = pend.get("return_step", "ROUTE"), pend.get("saved") or {}
+
+        yn = yes_no(norm)
+        if yn == "yes":
+            restore()
+            self.asr = None
+            self.tr.step("rule", "Confirmed what was heard", "processing the original words now")
+            return self._process(self._prepare(text)[0])
+        if yn == "no":
+            restore()
+            return f"{self._('Sorry about that. Please say it again.')} {self._reprompt()}"
+        restore()  # the caller simply said something new: treat it as their answer
+        self.asr = None
+        return self._process(norm)
 
     def _silence(self) -> str:
         """The caller said nothing (the page sends an empty turn after a pause). Prompt once, then hang up."""
@@ -517,6 +578,8 @@ class Brain:
             return self._select_prompt()
         if step == "CLARIFY":
             return self._clarify_prompt()
+        if step == "HEARD":
+            return self._("I heard: “{0}”. Is that right?", st.pending.get("text", ""))
         if step == "WAITLIST":
             pref = self._waitlist_pref()
             return self._(
