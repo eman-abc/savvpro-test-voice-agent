@@ -3,9 +3,9 @@ import TraceLedger from "../components/TraceLedger";
 import WeekCalendar from "../components/WeekCalendar";
 import { ApiError, api } from "../lib/api";
 import { addDays, formatDay, formatTime, isoDate, mondayOf, outcomeLabel, parseLocal } from "../lib/format";
-import type { CallDetail, CallSummary, ChannelStatus, Config, NotificationRow, PatientRow, Provider, ScenarioRun, StaffAppointment, Stats, WaitlistRow } from "../lib/types";
+import type { CallDetail, CallInsights, CallSummary, ChannelStatus, Config, IngestReport, KnowledgeAnswer, KnowledgeStatus, NotificationRow, PatientRow, Provider, ScenarioRun, StaffAppointment, Stats, WaitlistRow } from "../lib/types";
 
-type Tab = "calendar" | "appointments" | "messages" | "waitlist" | "calls" | "scenarios";
+type Tab = "calendar" | "appointments" | "messages" | "waitlist" | "calls" | "knowledge" | "scenarios";
 
 export default function StaffPage({ config }: { config: Config | null }) {
   const [user, setUser] = useState<{ username: string; role: string } | null | undefined>(undefined);
@@ -123,9 +123,9 @@ function Dashboard({ user, config, onSignOut }: { user: { username: string; role
       )}
       {error && <p className="notice error" role="alert">{error}</p>}
       <div className="tabbar" role="tablist">
-        {(["calendar", "appointments", "messages", "waitlist", "calls", "scenarios"] as Tab[]).map((t) => (
+        {(["calendar", "appointments", "messages", "waitlist", "calls", "knowledge", "scenarios"] as Tab[]).map((t) => (
           <button key={t} role="tab" className="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-            {{ calendar: "Calendar", appointments: "Appointments", messages: "Messages", waitlist: "Waitlist", calls: "Call log", scenarios: "Scenarios" }[t]}
+            {{ calendar: "Calendar", appointments: "Appointments", messages: "Messages", waitlist: "Waitlist", calls: "Call log", knowledge: "Knowledge", scenarios: "Scenarios" }[t]}
           </button>
         ))}
       </div>
@@ -134,6 +134,7 @@ function Dashboard({ user, config, onSignOut }: { user: { username: string; role
       {tab === "messages" && <MessagesTab onChange={loadStats} onError={handle} isAdmin={user.role === "admin"} />}
       {tab === "waitlist" && <WaitlistTab onChange={loadStats} onError={handle} />}
       {tab === "calls" && <CallsTab onError={handle} />}
+      {tab === "knowledge" && <KnowledgeTab onError={handle} isAdmin={user.role === "admin"} />}
       {tab === "scenarios" && <ScenariosTab onError={handle} />}
     </>
   );
@@ -595,5 +596,143 @@ function ChannelPanel({ isAdmin, onError }: { isAdmin: boolean; onError: (e: unk
       )}
       {linked && <p className="notice info" role="status" style={{ marginTop: 8 }}>{linked}</p>}
     </section>
+  );
+}
+
+function KnowledgeTab({ onError, isAdmin }: { onError: (e: unknown) => void; isAdmin: boolean }) {
+  const [status, setStatus] = useState<KnowledgeStatus | null>(null);
+  const [q, setQ] = useState("");
+  const [lang, setLang] = useState("en");
+  const [answer, setAnswer] = useState<KnowledgeAnswer | null>(null);
+  const [outcome, setOutcome] = useState("handoff");
+  const [insights, setInsights] = useState<CallInsights | null>(null);
+  const [calls, setCalls] = useState(0);
+  const [report, setReport] = useState<IngestReport | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.knowledgeStatus().then(setStatus).catch(onError);
+  }, [onError]);
+
+  const search = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!q.trim()) return;
+    try {
+      setAnswer(await api.knowledgeSearch(q.trim(), lang));
+    } catch (err) {
+      onError(err);
+    }
+  };
+  const loadInsights = async () => {
+    try {
+      setInsights(await api.knowledgeInsights(outcome));
+    } catch (err) {
+      onError(err);
+    }
+  };
+  const reindex = async () => {
+    setBusy(true);
+    try {
+      setReport(await api.knowledgeReindex(calls));
+      setStatus(await api.knowledgeStatus());
+    } catch (err) {
+      onError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {status && (
+        <section className="panel" style={{ padding: "12px 16px" }} aria-label="Knowledge layer status">
+          <p style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            <span>Search: <span className="badge">{status.search_backend}</span></span>
+            <span>Graph: <span className="badge">{status.graph_backend}</span></span>
+            <span className="muted">{status.documents} documents · {status.facts} facts · {Object.entries(status.graph.nodes).map(([k, v]) => `${v} ${k}`).join(", ")} · {Object.values(status.graph.relationships).reduce((a, b) => a + b, 0)} relationships</span>
+          </p>
+        </section>
+      )}
+
+      <section className="panel" style={{ padding: "12px 16px" }} aria-labelledby="ks-h">
+        <h2 id="ks-h" style={{ fontSize: 18, marginBottom: 8 }}>Search with sources</h2>
+        <form onSubmit={search} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div className="field" style={{ flex: 1, minWidth: 240 }}>
+            <label htmlFor="kq">Question</label>
+            <input id="kq" className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Can I cancel for free?" />
+          </div>
+          <div className="field">
+            <label htmlFor="kl">Answer in</label>
+            <select id="kl" className="input" value={lang} onChange={(e) => setLang(e.target.value)}>
+              <option value="en">English</option>
+              <option value="ur">اردو</option>
+            </select>
+          </div>
+          <button className="btn small" disabled={!q.trim()}>Search</button>
+        </form>
+        {answer && (
+          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+            {answer.results.length === 0 && <p className="empty">Nothing relevant found.</p>}
+            {answer.results.map((r) => (
+              <article key={r.id} className="panel" style={{ padding: 12 }}>
+                <p><b>{r.title}</b> <span className="badge">{r.kind}</span></p>
+                <p dir="auto" style={{ margin: "6px 0" }}>{r.text}</p>
+                {r.facts.length > 0 && <ul className="muted">{r.facts.map((f) => <li key={f}>{f}</li>)}</ul>}
+                <p className="muted">Source: <code>{r.source}</code> · score {r.score}</p>
+              </article>
+            ))}
+            {answer.suggestions.length > 0 && (
+              <p className="notice info">Suggested next: {answer.suggestions.map((s) => `${s.title}${s.providers.length ? ` (${s.providers.join(", ")})` : ""}`).join("; ")}</p>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="panel" style={{ padding: "12px 16px" }} aria-labelledby="ki-h">
+        <h2 id="ki-h" style={{ fontSize: 18, marginBottom: 8 }}>What callers said before a call ended</h2>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div className="field">
+            <label htmlFor="ko">Calls that ended in</label>
+            <select id="ko" className="input" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+              {["handoff", "no_response", "no_action", "emergency", "booked", "faq"].map((o) => <option key={o} value={o}>{o.replace("_", " ")}</option>)}
+            </select>
+          </div>
+          <button className="btn small" onClick={loadInsights}>Load</button>
+        </div>
+        {insights && (
+          <div style={{ marginTop: 12 }}>
+            <p className="muted">{insights.calls} of {insights.of_total} calls · computed by <span className="badge">{insights.backend}</span></p>
+            {insights.top_last_utterances.length === 0 ? <p className="empty">No calls ended that way yet.</p> : (
+              <table className="list">
+                <thead><tr><th>Last thing the caller said</th><th>Calls</th></tr></thead>
+                <tbody>{insights.top_last_utterances.map((u) => <tr key={u.text}><td dir="auto">{u.text}</td><td className="num">{u.count}</td></tr>)}</tbody>
+              </table>
+            )}
+            {insights.signal_terms.length > 0 && <p className="muted" style={{ marginTop: 8 }}>Words that stand out in these calls: {insights.signal_terms.map((t) => `${t.term} (${t.count})`).join(", ")}</p>}
+          </div>
+        )}
+      </section>
+
+      {isAdmin && (
+        <section className="panel" style={{ padding: "12px 16px" }} aria-labelledby="kr-h">
+          <h2 id="kr-h" style={{ fontSize: 18, marginBottom: 8 }}>Reload knowledge</h2>
+          <p className="muted">Re-reads the clinic rules and loads them into SQL, search and the graph. Safe to repeat: unchanged documents are skipped. Synthetic calls are generated by replaying the scripted conversations and are labelled as such.</p>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
+            <div className="field">
+              <label htmlFor="kc">Add synthetic calls (needs Elasticsearch)</label>
+              <input id="kc" className="input" type="number" min={0} max={2000} value={calls} onChange={(e) => setCalls(Math.max(0, Math.min(2000, Number(e.target.value) || 0)))} />
+            </div>
+            <button className="btn small" onClick={reindex} disabled={busy}>{busy ? "Working…" : "Reload"}</button>
+          </div>
+          {report && (
+            <p className="notice info" role="status" style={{ marginTop: 8 }}>
+              {report.documents} documents · SQL: {Object.entries(report.sql).map(([k, v]) => `${v} ${k}`).join(", ")}
+              {report.elasticsearch ? ` · search: ${report.elasticsearch.indexed} indexed, ${report.elasticsearch.deleted} deleted` : " · search: not configured"}
+              {report.neo4j ? ` · graph: ${report.neo4j.nodes} nodes, ${report.neo4j.relationships} relationships` : " · graph: not configured"}
+            </p>
+          )}
+        </section>
+      )}
+    </div>
   );
 }

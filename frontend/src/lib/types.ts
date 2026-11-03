@@ -175,3 +175,43 @@ export interface Heard {
   confidence: number | null;
   language: string;
 }
+export interface KnowledgeResult {
+  id: string;
+  kind: string;
+  title: string;
+  text: string;
+  score: number;
+  source: string;
+  facts: string[];
+}
+export interface KnowledgeAnswer {
+  query: string;
+  search_backend: string;
+  graph_backend: string;
+  results: KnowledgeResult[];
+  suggestions: { service: string; title: string; providers: string[] }[];
+  provenance: string[];
+}
+export interface KnowledgeStatus {
+  documents: number;
+  facts: number;
+  search_backend: string;
+  graph_backend: string;
+  graph: { nodes: Record<string, number>; relationships: Record<string, number> };
+}
+export interface CallInsights {
+  outcome: string;
+  calls: number;
+  of_total: number;
+  top_last_utterances: { text: string; count: number }[];
+  signal_terms: { term: string; count: number; score: number }[];
+  backend: string;
+}
+export interface IngestReport {
+  dry_run: boolean;
+  documents: number;
+  sql: Record<string, number>;
+  elasticsearch: Record<string, unknown> | null;
+  neo4j: Record<string, unknown> | null;
+  calls: Record<string, unknown> | null;
+}

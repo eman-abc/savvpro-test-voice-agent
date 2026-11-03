@@ -258,3 +258,24 @@ def test_staff_sees_channel_status_and_can_link_a_number(page, base_url):
     panel.get_by_role("button", name="Link number").click()
     page.wait_for_function("() => /ending 2222/.test(document.body.innerText)")
     assert axe_violations(page) == []
+
+
+def test_knowledge_tab_searches_with_sources_and_is_accessible(page, base_url):
+    staff_login(page, base_url)
+    page.get_by_role("tab", name="Knowledge").click()
+    page.wait_for_selector("section[aria-label='Knowledge layer status']")
+    page.get_by_label("Question").fill("are you accepting new patients")
+    page.get_by_role("button", name="Search").click()
+    page.wait_for_selector("article")
+    assert "clinic.yaml" in page.locator("article").first.inner_text()  # every result names where it came from
+    assert (
+        "New patient visit" in page.locator(".notice.info").first.inner_text()
+    )  # and a FAQ suggests the right service
+    page.get_by_label("Answer in").select_option("ur")
+    page.get_by_role("button", name="Search").click()
+    page.wait_for_function("() => /[\\u0600-\\u06FF]/.test(document.querySelector('article').innerText)")
+    page.get_by_role("button", name="Load", exact=True).click()
+    page.wait_for_function("() => /computed by/.test(document.body.innerText)")
+    page.get_by_role("button", name="Reload").click()
+    page.wait_for_function("() => /54 documents · SQL/.test(document.body.innerText)")
+    assert axe_violations(page) == []

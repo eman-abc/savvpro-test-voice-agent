@@ -10,6 +10,10 @@ import type {
   TurnOut,
   WaitlistRow,
   ChannelStatus,
+  CallInsights,
+  IngestReport,
+  KnowledgeAnswer,
+  KnowledgeStatus,
   Heard,
   PatientRow,
 } from "./types";
@@ -89,5 +93,9 @@ export const api = {
   patients: () => request<PatientRow[]>("/api/staff/patients"),
   linkPhone: (id: number, phone: string) => post<{ id: number; phone_last4: string }>(`/api/staff/patients/${id}/phone`, { phone }),
   channels: () => request<ChannelStatus>("/api/staff/channels"),
+  knowledgeStatus: () => request<KnowledgeStatus>("/api/staff/knowledge/status"),
+  knowledgeSearch: (q: string, lang: string) => request<KnowledgeAnswer>(`/api/staff/knowledge/search?q=${encodeURIComponent(q)}&lang=${lang}&k=3`),
+  knowledgeInsights: (outcome: string) => request<CallInsights>(`/api/staff/knowledge/insights?outcome=${encodeURIComponent(outcome)}`),
+  knowledgeReindex: (calls: number) => post<IngestReport>(`/api/staff/knowledge/reindex?calls=${calls}`),
   cancelWaitlist: (id: number) => post<{ id: number; status: string }>(`/api/staff/waitlist/${id}/cancel`),
 };
