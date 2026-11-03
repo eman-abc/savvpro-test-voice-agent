@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -18,18 +19,20 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app import models as m
-from app.api import auth, calls, messages, staff
+from app.api import auth, calls, messages, speech, staff, whatsapp
 from app.api.deps import AppContext, client_ip, make_service
 from app.brain.retrieval import FaqIndex
+from app.channels.whatsapp import WhatsAppClient
 from app.config import Settings, get_settings
 from app.db import Database, startup_lock
 from app.logging_config import configure_logging
 from app.metrics import Metrics
 from app.migrate import upgrade as run_migrations
-from app.reminders import LogNotifier, send_due_reminders
+from app.reminders import send_due_reminders
 from app.rules import load_rules
 from app.security import LoginThrottle, RateLimiter
-from app.seed import ensure_staff, public_demo_hints, purge_old_calls, seed_demo
+from app.seed import ensure_staff, link_demo_whatsapp, public_demo_hints, purge_old_calls, seed_demo
+from app.speech.stt import make_stt
 
 log = logging.getLogger("app")
 
@@ -53,7 +56,8 @@ def _init_sentry(settings: Settings) -> None:
         log.warning("SENTRY_DSN is set but sentry-sdk is not installed")
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, http_transport: httpx.BaseTransport | None = None) -> FastAPI:
+    """`http_transport` lets tests replace the network (Graph API, Deepgram) with a fake."""
     settings = settings or get_settings()
     configure_logging(settings.log_level)
     rules = load_rules(settings.rules_path)
@@ -66,6 +70,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         throttle=LoginThrottle(settings.login_max_failures, settings.login_lockout_minutes * 60),
         limiter=RateLimiter(settings.rate_limit_per_minute),
         metrics=Metrics(),
+        stt=make_stt(settings, http_transport),
+        whatsapp=WhatsAppClient.from_settings(settings, http_transport) if settings.whatsapp_enabled else None,
     )
     _init_sentry(settings)
 
@@ -82,6 +88,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ensure_staff(s, settings)
                 if settings.demo_mode:
                     seed_demo(svc)
+                link_demo_whatsapp(s, settings)
                 purged = purge_old_calls(s, settings.session_retention_hours)
                 log.info("startup complete (purged %d old calls)", purged)
         task = asyncio.create_task(_background_loop()) if settings.background_enabled else None
@@ -91,14 +98,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     async def _background_loop() -> None:
         """Every minute: expire unanswered waitlist offers (and pass the slot on); send due reminders if enabled."""
-        notifier = LogNotifier()
 
         def once() -> int:
             with db.session() as s:
-                svc = make_service(s, settings, rules)
+                svc = make_service(s, settings, rules, whatsapp=ctx.whatsapp)
                 n = svc.waitlist.expire()  # type: ignore[union-attr]
                 if settings.reminders_enabled:
-                    n += send_due_reminders(svc, notifier, settings.reminder_hours)
+                    n += send_due_reminders(svc, svc.waitlist.outbox.notifier, settings.reminder_hours)
                 return n
 
         while True:
@@ -130,7 +136,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def request_pipeline(request: Request, call_next):  # type: ignore[no-untyped-def]
         rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
         started = time.perf_counter()
-        if request.url.path.startswith("/api/") and not ctx.limiter.allow(f"ip:{client_ip(request)}"):
+        limited = request.url.path.startswith("/api/") and request.url.path != "/api/whatsapp/webhook"  # signed by Meta
+        if limited and not ctx.limiter.allow(f"ip:{client_ip(request)}"):
             response = JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
         else:
             response = await call_next(request)
@@ -174,7 +181,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/version", tags=["public"])
     def version() -> dict:
         return {
-            "version": "1.2.0",
+            "version": "1.3.0",
             "commit": os.environ.get("GIT_SHA") or os.environ.get("RENDER_GIT_COMMIT") or "dev",
             "built": os.environ.get("BUILD_TIME", "unknown"),
         }
@@ -200,6 +207,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "demo_mode": settings.demo_mode,
             "services": [{"key": s.key, "name": s.name, "minutes": s.duration_minutes} for s in rules.services],
             "policy": {"cancel_notice_hours": rules.policy.cancel_notice_hours},
+            "stt": settings.stt_provider != "none",
+            "whatsapp": settings.whatsapp_enabled,
         }
         if settings.demo_mode:
             cfg["demo_patients"] = public_demo_hints()
@@ -210,6 +219,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(staff.router)
     app.include_router(messages.router)
+    app.include_router(speech.router)
+    app.include_router(whatsapp.router)
 
     static = Path(settings.static_dir)
     if (static / "index.html").exists():

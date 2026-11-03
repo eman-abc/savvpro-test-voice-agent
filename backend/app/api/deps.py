@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app import models as m
 from app.brain.retrieval import FaqIndex
+from app.channels.whatsapp import WhatsAppNotifier
 from app.config import Settings
 from app.db import Database
 from app.metrics import Metrics
@@ -30,6 +31,8 @@ class AppContext:
     throttle: LoginThrottle
     limiter: RateLimiter
     metrics: Metrics
+    stt: object | None = None  # app.speech.stt.SpeechToText
+    whatsapp: object | None = None  # app.channels.whatsapp.WhatsAppClient
 
 
 def get_ctx(request: Request) -> AppContext:
@@ -44,26 +47,27 @@ def get_db(ctx: AppContext = Depends(get_ctx)) -> Iterator[Session]:
         db.close()
 
 
-def attach_engagement(svc: ClinicService, settings: Settings) -> None:
+def attach_engagement(svc: ClinicService, settings: Settings, whatsapp: object | None = None) -> None:
     """Give a service the waitlist, and make every freed slot go to the next person in line."""
-    wl = WaitlistService(svc, Outbox(svc.db, LogNotifier()), settings.waitlist_offer_minutes)
+    notifier = WhatsAppNotifier(whatsapp, svc.db, settings) if whatsapp is not None else LogNotifier()  # type: ignore[arg-type]
+    wl = WaitlistService(svc, Outbox(svc.db, notifier), settings.waitlist_offer_minutes)
     svc.waitlist = wl
     svc.on_freed = lambda freed: wl.on_slot_freed(freed)
 
 
-def make_service(db: Session, settings: Settings, rules: ClinicRules) -> ClinicService:
+def make_service(db: Session, settings: Settings, rules: ClinicRules, whatsapp: object | None = None) -> ClinicService:
     """Builds the domain service. `FIXED_NOW` is a test-only clock seam (ignored outside APP_ENV=test)."""
     now_fn = None
     if settings.app_env == "test" and settings.fixed_now:
         fixed = datetime.fromisoformat(settings.fixed_now)
         now_fn = lambda: fixed  # noqa: E731
     svc = ClinicService(db, rules, now_fn)
-    attach_engagement(svc, settings)
+    attach_engagement(svc, settings, whatsapp)
     return svc
 
 
 def get_service(db: Session = Depends(get_db), ctx: AppContext = Depends(get_ctx)) -> ClinicService:
-    return make_service(db, ctx.settings, ctx.rules)
+    return make_service(db, ctx.settings, ctx.rules, whatsapp=ctx.whatsapp)
 
 
 def client_ip(request: Request) -> str:

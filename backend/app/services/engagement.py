@@ -28,15 +28,24 @@ from app.services.clinic import ClinicService, PatientConflictError, Slot, SlotT
 log = logging.getLogger("engagement")
 
 
+class SkipSend(Exception):
+    """A message was deliberately not sent (number not allowed, or WhatsApp's 24-hour window is closed)."""
+
+    def __init__(self, status: str, why: str):
+        super().__init__(why)
+        self.status, self.why = status, why
+
+
 class Notifier(Protocol):
-    def send(self, phone: str, text: str) -> None: ...
+    def send(self, phone: str, text: str) -> str | None: ...
 
 
 class LogNotifier:
     """Default sender: logs a masked number instead of texting. An SMS/WhatsApp adapter implements `send`."""
 
-    def send(self, phone: str, text: str) -> None:
+    def send(self, phone: str, text: str) -> str | None:
         log.info("message (not actually sent) to ***-***-%s", phone[-4:])
+        return None
 
 
 # ---------------------------------------------------------------------------- wording ---
@@ -109,15 +118,26 @@ class Outbox:
         self.db.add(note)
         self.db.flush()
         try:
-            self.notifier.send(patient.phone, body)
-        except Exception:  # noqa: BLE001 - the message stays in the outbox as a record
+            external = self.notifier.send(patient.phone, body)
+        except SkipSend as skip:
+            note.status, note.error = skip.status, skip.why[:200]
+        except Exception as exc:  # noqa: BLE001 - the message stays in the outbox as a record
             log.exception("sending failed for notification %s", note.id)
-            note.status = "failed"
+            note.status, note.error = "failed", f"{exc.__class__.__name__}: {exc}"[:200]
+        else:
+            if isinstance(external, str):
+                note.external_id, note.delivery = external, "sent"
         self.db.commit()
         return note
 
 
-def send_due_reminders(svc: ClinicService, notifier: Notifier, hours: int) -> int:
+RETRIABLE = {"failed", "window_closed"}
+MAX_REMINDER_ATTEMPTS = 3
+
+
+def send_due_reminders(
+    svc: ClinicService, notifier: Notifier, hours: int, retry_after: timedelta = timedelta(minutes=15)
+) -> int:
     """Remind patients whose visit starts within `hours`. Each appointment is reminded at most once."""
     now = svc.now()
     outbox = Outbox(svc.db, notifier)
@@ -135,12 +155,25 @@ def send_due_reminders(svc: ClinicService, notifier: Notifier, hours: int) -> in
     for a in list(svc.db.scalars(q).unique()):
         if not a.patient.phone:
             continue
+        prior = list(
+            svc.db.scalars(
+                select(m.Notification)
+                .where(m.Notification.appointment_id == a.id, m.Notification.kind == "reminder")
+                .order_by(m.Notification.id)
+            )
+        )
+        if prior:
+            if len(prior) >= MAX_REMINDER_ATTEMPTS:  # stop trying; staff can see every attempt in the Messages tab
+                a.reminder_sent_at = m.utcnow()
+                continue
+            if prior[-1].status in RETRIABLE and m.utcnow() - prior[-1].created_at < retry_after:
+                continue  # back off instead of retrying every minute
         lang = a.patient.preferred_lang or "en"
         note = outbox.send(
             a.patient, "reminder", reminder_text(Fmt(svc.rules, lang, now.date()), a), lang, appointment_id=a.id
         )
-        if note is None or note.status == "failed":
-            continue  # retried on the next pass
+        if note is None or note.status in RETRIABLE:
+            continue  # failed or window closed: retried after the back-off, up to MAX_REMINDER_ATTEMPTS
         a.reminder_sent_at = m.utcnow()
         svc.db.add(m.AuditLog(actor="system", action="reminder", entity="appointment", entity_id=str(a.id)))
         sent += 1
@@ -151,6 +184,21 @@ def send_due_reminders(svc: ClinicService, notifier: Notifier, hours: int) -> in
 # --------------------------------------------------------------------------- waitlist ---
 def _t(s: str | None) -> time | None:
     return time.fromisoformat(s) if s else None
+
+
+def patient_for_phone(db, phone: str) -> m.Patient | None:
+    """Match a phone number to a patient by its last 7 digits (use full international numbers in production)."""
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) < 7:
+        return None
+    return next(
+        (
+            p
+            for p in db.scalars(select(m.Patient).where(m.Patient.phone.is_not(None)))
+            if re.sub(r"\D", "", p.phone or "")[-7:] == digits[-7:]
+        ),
+        None,
+    )
 
 
 class WaitlistService:
@@ -313,21 +361,25 @@ class WaitlistService:
         return n
 
     # -- replies ----------------------------------------------------------------------
+    def has_open_notification(self, phone: str) -> bool:
+        """Is a reminder or waitlist offer waiting for this patient's answer?"""
+        patient = patient_for_phone(self.db, phone)
+        if patient is None:
+            return False
+        q = (
+            select(m.Notification.id)
+            .where(
+                m.Notification.patient_id == patient.id,
+                m.Notification.kind.in_(["reminder", "offer"]),
+                m.Notification.status.in_(["sent", "awaiting_confirm"]),
+            )
+            .limit(1)
+        )
+        return self.db.scalar(q) is not None
+
     def handle_inbound(self, phone: str, text: str) -> str | None:
         """A patient replied to a reminder or an offer. Returns the reply we send back."""
-        digits = re.sub(r"\D", "", phone)
-        patient = (
-            next(
-                (
-                    p
-                    for p in self.db.scalars(select(m.Patient).where(m.Patient.phone.is_not(None)))
-                    if re.sub(r"\D", "", p.phone or "")[-7:] == digits[-7:]
-                ),
-                None,
-            )
-            if len(digits) >= 7
-            else None
-        )
+        patient = patient_for_phone(self.db, phone)
         if patient is None:
             return None
         lang = patient.preferred_lang or "en"

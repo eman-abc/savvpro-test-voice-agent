@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models as m
 from app.api.deps import AppContext, get_ctx, get_db, get_service, require_admin, require_staff
-from app.api.schemas import CancelIn, ReplyIn, RunRemindersIn
+from app.api.schemas import CancelIn, PhoneIn, ReplyIn, RunRemindersIn
 from app.scenarios import load_scenarios, run_all
 from app.seed import reset_demo
 from app.services.clinic import ClinicService
-from app.services.engagement import LogNotifier, send_due_reminders
+from app.services.engagement import send_due_reminders
 
 router = APIRouter(prefix="/api/staff", tags=["staff"], dependencies=[Depends(require_staff)])
 
@@ -198,6 +198,8 @@ def notifications(limit: int = Query(100, ge=1, le=300), db: Session = Depends(g
             "reply_text": n.reply_text,
             "appointment_id": n.appointment_id,
             "waitlist_id": n.waitlist_id,
+            "delivery": n.delivery,
+            "error": n.error,
             "phone_last4": n.to_phone[-4:],
         }
         for n in db.scalars(q).unique()
@@ -258,4 +260,43 @@ def cancel_waitlist(entry_id: int, db: Session = Depends(get_db)) -> dict:
 @router.post("/reminders/run", dependencies=[Depends(require_admin)])
 def run_reminders(body: RunRemindersIn, svc: ClinicService = Depends(get_service)) -> dict:
     """Send due reminders now (the background loop does this every minute when enabled)."""
-    return {"sent": send_due_reminders(svc, LogNotifier(), body.hours), "expired": svc.waitlist.expire()}  # type: ignore[union-attr]
+    return {"sent": send_due_reminders(svc, svc.waitlist.outbox.notifier, body.hours), "expired": svc.waitlist.expire()}  # type: ignore[union-attr]
+
+
+@router.get("/patients")
+def patients(db: Session = Depends(get_db)) -> list[dict]:
+    return [
+        {"id": p.id, "name": p.full_name, "phone_last4": (p.phone or "")[-4:] or None, "lang": p.preferred_lang}
+        for p in db.scalars(select(m.Patient).order_by(m.Patient.id))
+    ]
+
+
+@router.post("/patients/{patient_id}/phone", dependencies=[Depends(require_admin)])
+def link_phone(patient_id: int, body: PhoneIn, db: Session = Depends(get_db)) -> dict:
+    """Demo helper: point a (fake) patient at a real WhatsApp number so messages reach the tester's phone."""
+    p = db.get(m.Patient, patient_id)
+    if p is None:
+        raise HTTPException(404, "Patient not found")
+    digits = "".join(c for c in body.phone if c.isdigit())
+    if not 7 <= len(digits) <= 15:
+        raise HTTPException(422, "Enter the number with country code, 7 to 15 digits")
+    p.phone = digits
+    db.add(
+        m.AuditLog(actor="staff", action="link_phone", entity="patient", entity_id=str(p.id), detail=f"…{digits[-4:]}")
+    )
+    db.commit()
+    return {"id": p.id, "phone_last4": digits[-4:]}
+
+
+@router.get("/channels")
+def channels(ctx: AppContext = Depends(get_ctx)) -> dict:
+    s = ctx.settings
+    return {
+        "whatsapp": {
+            "enabled": s.whatsapp_enabled,
+            "webhook_path": "/api/whatsapp/webhook",
+            "restricted_to_allowed_numbers": bool(s.whatsapp_allowed),
+            "template_configured": bool(s.whatsapp_template_name),
+        },
+        "speech_to_text": {"provider": s.stt_provider if ctx.stt else "browser"},
+    }
