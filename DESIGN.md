@@ -120,6 +120,24 @@ patients a past visit.
 - Phone numbers are shown only as last four digits to staff; fake data only; old calls are purged.
 - Prod refuses to start with the default JWT secret.
 
+## Channels and the perception / decision boundary
+
+The brain is channel-agnostic: `Brain.handle(state, text, asr_confidence)` is the only entry point, and `app/turns.py:run_turn` is the
+single place a turn is loaded, decided, saved and measured. The web page, WhatsApp text and WhatsApp voice notes all call it, so
+behaviour (rules, language, corrections, policies) is identical everywhere. **AI lives at the edges as perception**: a pretrained
+speech model produces `{text, confidence}`; code decides what to do with it. A low confidence makes the rules read back what was heard
+(`HEARD` step) for free-form answers only, never for yes/no steps, and never for emergency words, which are acted on immediately.
+Provider choice is behind small interfaces (`SpeechToText`, `Notifier`), with fakes for tests and the browser recogniser as fallback.
+
+**WhatsApp.** A signed webhook (HMAC-SHA256 of the raw body with the app secret, constant-time compare; no secret configured means the
+endpoint does not exist) answers 200 immediately and processes in the background, because Meta retries slow webhooks. Idempotency is
+**insert-first on a primary key**: a check-then-insert let a retry that raced the original through on Postgres (found by running the real
+stack, not by the unit tests). Each phone number maps to a chat session (`channel='whatsapp'`); a bare "1" answers a pending reminder or
+offer unless the patient is mid-conversation. Outbound messages respect the 24-hour rule: free-form text only after the patient wrote
+(tracked per number), an approved template otherwise, or a recorded `window_closed` status. Delivery receipts update a separate
+`delivery` field so conversation outcome and transport status never overwrite each other. Reminders retry failed or window-closed sends
+with back-off, three times at most.
+
 ## Languages
 
 One set of rules, two languages. What the caller says is first **normalised into a small canonical English vocabulary**
@@ -205,5 +223,5 @@ so the demo reads the same wherever the viewer is.
 - **Generated TypeScript API types, OpenTelemetry tracing, per-PR preview deploys.**
 - **Multi-worker performance numbers**: my sandbox had one CPU core, so scaling is untested.
 - Several requests in one sentence ("cancel Tuesday and book Thursday"): the brain handles one request at a time.
-- **A real SMS/WhatsApp sender** (the interface and the webhook exist; the adapter needs a provider account).
+- **Live verification of WhatsApp and Deepgram**: both are built and tested against fakes and a local stand-in for Meta's API, but not against the real services. Also not built: audio replies (text-to-speech) and WhatsApp template management.
 - **Native-speaker review of the Urdu**, Urdu text-to-speech voices on every device, and a wider Urdu lexicon.

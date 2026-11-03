@@ -19,12 +19,16 @@ Caller speaks -> speech to text -> THE BRAIN (our rules) -> text to speech -> ca
   per turn (intent and confidence, what it picked up, which rule fired, what it did, what it said).
 - **Staff area** (`/staff`): sign in, week calendar by provider, appointment list with cancel, call log
   with full transcripts and traces, and a few headline numbers.
-- **Scenarios tab**: replays 56 scripted calls on a throw-away database and scores task completion, turns
+- **Scenarios tab**: replays 61 scripted calls on a throw-away database and scores task completion, turns
   per call and intent accuracy, live, without touching real data.
 - **Urdu and English**: pick اردو on the start screen, or just speak Urdu (script, Roman Urdu or a mix) and the
   assistant answers in Urdu script. See "Urdu" below.
 - **Waitlist and two-way reminders**: when nothing fits, callers can join a waitlist; a cancellation offers the slot to
   the first match; reminders say "reply 1 to confirm, 2 to cancel". Staff see **Messages** and **Waitlist** tabs.
+- **WhatsApp channel**: chat with the same assistant over WhatsApp (English or Urdu), send **voice notes**, and receive reminders
+  and waitlist offers there (Meta Cloud API; setup in [docs/WHATSAPP_SETUP.md](docs/WHATSAPP_SETUP.md)).
+- **Speech at the edges**: a pretrained speech-to-text model (Deepgram, optional) turns audio into text and a confidence number;
+  when it is unsure the assistant **reads back what it heard** before acting. The browser recogniser is the fallback.
 - **"Are you still there?"** after a pause; the call ends politely after a second silence.
 - Handles messy callers: mid-sentence corrections, changing the time at the confirm step, ambiguous
   requests, wrong identity (with a lockout that survives hanging up and redialling), silence, frustration,
@@ -41,13 +45,28 @@ Requirements: Python 3.11+, Node 20+.
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest tests                             # 379 tests (unit, scripted calls, Urdu, fuzzing, API)
+pytest tests                             # ~450 tests (unit, scripted calls, Urdu, fuzzing, API)
 uvicorn app.asgi:app --reload --port 8000
 
 # 2. frontend (second terminal)
 cd frontend
 npm ci
 npm run dev                              # http://localhost:5173 (proxies /api to :8000)
+```
+
+**Windows (PowerShell)**: the same steps, with these differences. Environment variables are set per session
+(`$env:STT_PROVIDER = "fake"`), the virtual environment is activated with `.venv\Scripts\Activate.ps1`
+(run `Set-ExecutionPolicy -Scope Process RemoteSigned` first if scripts are blocked), and the `make` shortcuts
+are not available: use the underlying commands (`npm run build`, then copy `frontend/dist` to `backend/static`).
+
+```powershell
+cd backend
+python -m venv .venv
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+pytest tests
+uvicorn app.asgi:app --reload --port 8000
 ```
 
 Voice input uses the browser's Web Speech API, which works in **Chrome and Edge** (needs a mic and an
@@ -93,6 +112,12 @@ on every start. Note that HTTPS is required for the browser to allow the microph
 | `METRICS_TOKEN` | unset | set to expose `GET /metrics` (Prometheus); never exposed unauthenticated in prod |
 | `VERIFY_LOCK_FAILURES` / `VERIFY_LOCK_MINUTES` | `5` / `15` | failed identity checks per name before it is locked |
 | `REMINDERS_ENABLED` / `REMINDER_HOURS` | `false` / `24` | background reminders (logs by default; plug in an SMS sender) |
+| `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | unset | all four enable WhatsApp; until then its webhook does not exist |
+| `WHATSAPP_ALLOWED_NUMBERS` | empty | comma-separated digits; others are ignored (recommended for the demo) |
+| `WHATSAPP_TEMPLATE_NAME` | unset | approved template used when the 24-hour window is closed |
+| `DEMO_WHATSAPP_NUMBER` / `DEMO_WHATSAPP_PATIENT` | unset / `Wei Zhang` | link a demo patient to your own number at start-up (never committed) |
+| `STT_PROVIDER` | `none` | `deepgram` (needs `DEEPGRAM_API_KEY`), `fake` (tests/demos), or `none` (browser speech only) |
+| `ASR_MIN_CONFIDENCE` | `0.55` | below this the assistant reads back what it heard |
 | `SENTRY_DSN` | unset | optional; also `pip install sentry-sdk` |
 | `INBOUND_SECRET` | unset | shared secret for `POST /api/inbound/message` (patient replies); the endpoint is off until set |
 | `WAITLIST_OFFER_MINUTES` | `30` | how long a waitlist offer stays open before it passes to the next person |
@@ -124,9 +149,9 @@ backend/
   app/api/          calls.py auth.py staff.py deps.py schemas.py
   app/              main.py models.py rules.py security.py seed.py config.py db.py
   config/clinic.yaml  hours, services, providers, policy, FAQ (validated at start-up)
-  scenarios/        56 golden conversations (YAML), also run live from the staff "Scenarios" tab
+  scenarios/        61 golden conversations (YAML), also run live from the staff "Scenarios" tab
   migrations/       Alembic (initial schema); e2e/ browser tests; loadtest/ load script
-  tests/            379 tests: unit, dialogues, golden scenarios, fuzzing, service rules + race, API/auth
+  tests/            ~450 tests: unit, dialogues, golden scenarios, fuzzing, service rules + race, API/auth
 frontend/src/       pages/ components/ lib/   (React + TypeScript + Vite)
 Dockerfile  docker-compose.yml  render.yaml  .github/workflows/ci.yml
 DESIGN.md  AI_USAGE.md
@@ -135,8 +160,8 @@ DESIGN.md  AI_USAGE.md
 ## Tests and checks
 
 ```bash
-cd backend && pytest tests --cov=app     # 379 tests, about 93% coverage (CI requires 85%)
-cd backend && pytest e2e                 # 15 real-browser tests incl. accessibility, run at a pinned clock (needs: make build; playwright install chromium)
+cd backend && pytest tests --cov=app     # ~450 tests, about 93% coverage (CI requires 85%)
+cd backend && pytest e2e                 # 17 real-browser tests incl. accessibility, run at a pinned clock (needs: make build; playwright install chromium)
 cd backend && FUZZ_EXAMPLES=2500 pytest tests/test_fuzz.py   # heavier property-based fuzzing
 cd backend && ruff check app tests e2e && ruff format --check app tests e2e
 cd frontend && npm run typecheck && npm test && npm run build
@@ -144,7 +169,7 @@ make audit                               # pip-audit + npm audit
 make loadtest                            # needs the server running on :8000
 ```
 
-What the suites cover: unit tests for parsing and intents; **56 golden conversations** (13 in Urdu) (`backend/scenarios`);
+What the suites cover: unit tests for parsing and intents; **61 golden conversations** (14 in Urdu) (`backend/scenarios`);
 property-based fuzzing (random utterances and conversations must never crash or corrupt state); the
 double-booking race on real threads; security behaviour (lockout, session revocation, spoofed headers,
 CSRF, idempotent retries); migrations match the models; reminders; metrics; and in a real browser: the
@@ -172,6 +197,19 @@ per turn; 20 concurrent callers saturate at roughly 75 turns per second with p95
 serialises writes and there is one core). The brain itself does 0 to 8 queries and a few milliseconds of
 work per turn. A 4-worker Postgres run on that same single core was *slower* because everything shared one
 core, so that number says nothing about real scaling. Re-run `make loadtest` on your target hardware.
+
+## WhatsApp, voice notes and speech
+
+**Where AI is used, and where it isn't.** Pretrained speech models sit at the *edges*: they turn audio into text and report how
+confident they are. Everything the assistant decides or says comes from the rules in `backend/app/brain`. The model never chooses an
+action; a low confidence number only makes the rules ask "I heard X, is that right?" first.
+
+- Browser microphone: records a short clip, `POST /api/stt` transcribes it (Deepgram), and the text goes through the normal turn
+  together with the confidence. If the server provider is missing or fails, the page falls back to the browser's own recogniser.
+- WhatsApp voice notes: downloaded from Meta, transcribed the same way (the patient's language is tried first, then the other),
+  and answered with the transcript so the patient can see what was understood.
+- Messages are deduplicated atomically (Meta retries webhooks), signatures are verified on every call, and the demo can be limited
+  to your own number. Not built: spoken (audio) replies, which need a text-to-speech provider.
 
 ## Urdu (اردو)
 

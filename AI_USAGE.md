@@ -59,6 +59,18 @@ or reviewing translations), never at run time.
 | Wrote Urdu wording and number words from memory | Cannot be verified by the assistant | Spot-checked number words in a test; **a native speaker must review the Urdu** |
 | The sandbox's storage failed once mid-session | The tool reported it | Recovered from the delivered zip and the working copy; nothing was lost |
 
+## Round 4 (WhatsApp, voice notes, speech): more mistakes
+
+| Mistake | How it was found | Fix |
+|---|---|---|
+| The staff "Send due reminders" button and the background loop used the log-only sender, so reminders would never have gone out over WhatsApp | The first WhatsApp reminder test failed | Both now use the configured notifier |
+| Webhook de-duplication was check-then-insert, so a retry racing the original sent the patient an apology | Driving the real server on Postgres with six simultaneous deliveries; the SQLite tests are serial and could not show it | Insert-first on the primary key, plus a regression test |
+| A patch script aborted halfway again because the linter had reformatted its target | Tests failed in odd ways | Re-read the real code and re-applied each change with an assertion |
+| A reminder that could not be sent (window closed) would have been retried and re-recorded every minute | Reasoning about the background loop | Back-off, a cap of three attempts, and distinct statuses |
+| Browser tests selected a dropdown option by an exact label that includes a phone suffix | A failing test | Select by value |
+| `strftime("%-d")` in the demo-patient hints: valid on Linux, a crash on Windows. Every test passed in my Linux sandbox and CI | You ran the suite on Windows and 8 tests failed | Portable formatting, plus a test that scans the code for platform-specific format codes. **Lesson: I only ever ran things on Linux.** |
+| Voice-note and speech code was written against Meta's and Deepgram's documented formats from memory | Cannot be verified here | Tested against fakes that record every request; **needs a first run with real accounts** |
+
 ## Review and verification done by a human
 
 *(Fill this in with what you personally reviewed, changed, or tested.)*
