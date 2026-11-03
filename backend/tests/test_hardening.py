@@ -267,7 +267,9 @@ def test_a_failed_send_does_not_block_the_others_and_is_retried(svc):
     n = send_due_reminders(svc, FakeNotifier(fail_for=liam.phone), hours=24 * 14)
     assert n >= 3  # the others still went out
     again = FakeNotifier()
-    assert send_due_reminders(svc, again, hours=24 * 14) == 1 and again.sent[0][0] == liam.phone
+    assert (
+        send_due_reminders(svc, again, hours=24 * 14, retry_after=timedelta(0)) == 1 and again.sent[0][0] == liam.phone
+    )
 
 
 def test_cancelled_and_phoneless_appointments_get_no_reminder(svc):
@@ -331,3 +333,50 @@ def test_version_endpoint_reports_the_build(client, monkeypatch):
     monkeypatch.setenv("GIT_SHA", "abc1234")
     body = client.get("/api/version").json()
     assert body["commit"] == "abc1234" and body["version"]
+
+
+def test_upgrading_from_the_previous_release_keeps_calls_and_defaults_them_to_the_web_channel(tmp_path):
+    import sqlite3
+
+    url = f"sqlite:///{tmp_path / 'prev.db'}"
+    upgrade(url, "0002")
+    con = sqlite3.connect(tmp_path / "prev.db")
+    con.execute(
+        "INSERT INTO call_sessions (id, started_at, last_activity_at, state_json, turn_count) VALUES ('c1', '2026-01-01 00:00:00', '2026-01-01 00:00:00', '{}', 3)"
+    )
+    con.commit()
+    con.close()
+    upgrade(url)
+    con = sqlite3.connect(tmp_path / "prev.db")
+    assert con.execute("SELECT id, channel, contact, turn_count FROM call_sessions").fetchall() == [
+        ("c1", "web", None, 3)
+    ]
+    assert {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")} >= {
+        "whatsapp_contacts",
+        "processed_messages",
+    }
+    con.close()
+
+
+def test_no_platform_specific_date_format_codes_in_the_code():
+    """`%-d` / `%#d` work on only one operating system (the other raises "Invalid format string"). Found on Windows."""
+    import pathlib
+    import re
+
+    bad = []
+    for path in pathlib.Path(__file__).resolve().parents[1].joinpath("app").rglob("*.py"):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"%[-#][a-zA-Z]", line):
+                bad.append(f"{path.name}:{n}")
+    assert not bad, f"non-portable strftime codes: {bad}"
+
+
+def test_demo_hints_format_dates_portably():
+    from app.seed import public_demo_hints
+
+    hints = public_demo_hints()
+    assert len(hints) == 12
+    assert {"name": "Ahmed Khan", "dob": "June 12, 1983"}.items() <= next(
+        h for h in hints if h["name"] == "Ahmed Khan"
+    ).items()
+    assert all(", " in h["dob"] and not h["dob"].split()[1].startswith("0") for h in hints)  # "May 7", never "May 07"

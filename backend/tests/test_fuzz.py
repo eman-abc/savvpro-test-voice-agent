@@ -156,15 +156,15 @@ def test_weekday_phrases_land_in_the_future(day, prefix):
 
 
 @FAST
-@given(st.lists(utterance, min_size=1, max_size=14))
+@given(st.lists(st.tuples(utterance, st.one_of(st.none(), st.floats(0, 1))), min_size=1, max_size=14))
 def test_the_brain_survives_any_conversation(svc, rules, lines):
     call = Call(svc, rules)
     from app.services.engagement import Outbox, WaitlistService
     from tests.test_engagement import Recorder
 
     svc.waitlist = WaitlistService(svc, Outbox(svc.db, Recorder()))  # exercise the waitlist paths too
-    for line in lines:
-        reply = call.say(line)
+    for line, asr in lines:
+        reply = call.say(line, asr)
         assert isinstance(reply, str) and reply.strip()
         again = DialogState.from_json(call.state.to_json())  # state must always serialise and reload
         assert again.step == call.state.step and again.slots == call.state.slots

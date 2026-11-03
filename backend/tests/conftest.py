@@ -61,8 +61,8 @@ class Call:
         self.brain = Brain(svc, FaqIndex(rules.faq), "test:call")
         self.last = self.brain.start(self.state)
 
-    def say(self, text: str) -> str:
-        self.last = self.brain.handle(self.state, text)
+    def say(self, text: str, asr: float | None = None) -> str:
+        self.last = self.brain.handle(self.state, text, asr)
         return self.last.reply
 
     @property

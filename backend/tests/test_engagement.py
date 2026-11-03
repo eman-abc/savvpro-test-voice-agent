@@ -218,7 +218,9 @@ def test_a_failed_send_is_retried_and_recorded(svc):
     failed = svc.db.scalar(select(m.Notification).where(m.Notification.status == "failed"))
     assert failed is not None
     again = Recorder()
-    assert send_due_reminders(svc, again, hours=24 * 14) == 1 and again.sent[0][0] == liam.phone
+    assert (
+        send_due_reminders(svc, again, hours=24 * 14, retry_after=timedelta(0)) == 1 and again.sent[0][0] == liam.phone
+    )
 
 
 # --------------------------------------------------------------------- reminder replies ---
