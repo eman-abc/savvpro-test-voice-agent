@@ -45,7 +45,7 @@ Requirements: Python 3.11+, Node 20+.
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest tests                             # ~450 tests (unit, scripted calls, Urdu, fuzzing, API)
+pytest tests                             # 630+ tests (unit, scripted calls, Urdu, fuzzing, API, agent, knowledge)
 uvicorn app.asgi:app --reload --port 8000
 
 # 2. frontend (second terminal)
@@ -118,6 +118,11 @@ on every start. Note that HTTPS is required for the browser to allow the microph
 | `DEMO_WHATSAPP_NUMBER` / `DEMO_WHATSAPP_PATIENT` | unset / `Wei Zhang` | link a demo patient to your own number at start-up (never committed) |
 | `STT_PROVIDER` | `none` | `deepgram` (needs `DEEPGRAM_API_KEY`), `fake` (tests/demos), or `none` (browser speech only) |
 | `ASR_MIN_CONFIDENCE` | `0.55` | below this the assistant reads back what it heard |
+| `ELASTICSEARCH_URL` / `ES_URDU_ANALYZER` | unset / `urdu_custom` | enables Elasticsearch search; analyzer is one of `standard`, `arabic`, `persian`, `urdu_custom` |
+| `NEO4J_URI` / `NEO4J_PASSWORD` | unset | enables the Neo4j graph (AuraDB Free works: `neo4j+s://...`) |
+| `DENSE_ENABLED` | `false` | multilingual embeddings + hybrid fusion (`pip install -r backend/requirements-dense.txt`) |
+| `BRAIN` | `rules` | `rules` or `agent` |
+| `LLM_PROVIDER` / `LLM_MODEL` / `LLM_API_KEY` | `none` / unset / unset | for `BRAIN=agent`: `groq`, `openai` or `ollama` |
 | `SENTRY_DSN` | unset | optional; also `pip install sentry-sdk` |
 | `INBOUND_SECRET` | unset | shared secret for `POST /api/inbound/message` (patient replies); the endpoint is off until set |
 | `WAITLIST_OFFER_MINUTES` | `30` | how long a waitlist offer stays open before it passes to the next person |
@@ -149,9 +154,9 @@ backend/
   app/api/          calls.py auth.py staff.py deps.py schemas.py
   app/              main.py models.py rules.py security.py seed.py config.py db.py
   config/clinic.yaml  hours, services, providers, policy, FAQ (validated at start-up)
-  scenarios/        61 golden conversations (YAML), also run live from the staff "Scenarios" tab
+  scenarios/        66 golden conversations (YAML), also run live from the staff "Scenarios" tab
   migrations/       Alembic (initial schema); e2e/ browser tests; loadtest/ load script
-  tests/            ~450 tests: unit, dialogues, golden scenarios, fuzzing, service rules + race, API/auth
+  tests/            630+ tests: unit, dialogues, golden scenarios, fuzzing, service rules + race, API/auth
 frontend/src/       pages/ components/ lib/   (React + TypeScript + Vite)
 Dockerfile  docker-compose.yml  render.yaml  .github/workflows/ci.yml
 DESIGN.md  AI_USAGE.md
@@ -160,8 +165,8 @@ DESIGN.md  AI_USAGE.md
 ## Tests and checks
 
 ```bash
-cd backend && pytest tests --cov=app     # ~450 tests, about 93% coverage (CI requires 85%)
-cd backend && pytest e2e                 # 17 real-browser tests incl. accessibility, run at a pinned clock (needs: make build; playwright install chromium)
+cd backend && pytest tests --cov=app     # 630+ tests, about 90% coverage (CI requires 85%)
+cd backend && pytest e2e                 # 18 real-browser tests incl. accessibility, run at a pinned clock (needs: make build; playwright install chromium)
 cd backend && FUZZ_EXAMPLES=2500 pytest tests/test_fuzz.py   # heavier property-based fuzzing
 cd backend && ruff check app tests e2e && ruff format --check app tests e2e
 cd frontend && npm run typecheck && npm test && npm run build
@@ -169,7 +174,7 @@ make audit                               # pip-audit + npm audit
 make loadtest                            # needs the server running on :8000
 ```
 
-What the suites cover: unit tests for parsing and intents; **61 golden conversations** (14 in Urdu) (`backend/scenarios`);
+What the suites cover: unit tests for parsing and intents; **66 golden conversations** (16 in Urdu) (`backend/scenarios`);
 property-based fuzzing (random utterances and conversations must never crash or corrupt state); the
 double-booking race on real threads; security behaviour (lockout, session revocation, spoofed headers,
 CSRF, idempotent retries); migrations match the models; reminders; metrics; and in a real browser: the
@@ -249,6 +254,54 @@ Replies are matched to patients by the last 7 digits of the phone number: use fu
   require approval). Tag `vX.Y.Z` to run `release.yml` (versioned image + release notes).
 - If you use the deploy hook, switch off the host's automatic deploys so a deploy happens only after CI passes.
 - `/api/version` reports the version and commit, `/readyz` checks the database, `/metrics` is Prometheus (token-protected).
+
+## Knowledge layer: Elasticsearch, Neo4j, ingestion and evaluation
+
+> **Scope of this branch.** The original take-home required a rules-only brain. This branch deliberately goes further (a knowledge
+> layer and an optional LLM agent). The rules engine is still the default (`BRAIN=rules`) and the safety rules are shared.
+
+The clinic's facts live in `clinic.yaml`. One pipeline turns them into typed documents and loads three projections of the same data:
+
+| Store | What it holds | Why this store |
+|---|---|---|
+| **SQL** | bookings, patients, and what the pipeline last loaded | transactions: no double booking, atomic reschedule |
+| **Elasticsearch** | FAQ / policy / service / provider text (English + Urdu analyzers) and call transcripts | full-text search, per-language analysis, aggregations ("what did callers say before a handoff?") |
+| **Neo4j** | providers, services, policies and FAQs as a graph; bookings as an id-only read model | relationships and provenance ("which rules govern this service, and where do they come from?") |
+
+SQL stays the source of truth for bookings. The graph is a read-optimised knowledge layer, and it never stores names, birth dates or phone numbers.
+Every layer is optional and falls back: no Elasticsearch means my own BM25, no Neo4j means an in-memory graph with identical answers (a parity test checks this),
+so the deployed demo works with nothing else running.
+
+```bash
+docker compose --profile knowledge up -d elasticsearch neo4j     # local development only (security is off in this compose file)
+export ELASTICSEARCH_URL=http://localhost:9200 NEO4J_URI=bolt://localhost:7687 NEO4J_PASSWORD=localdevpassword
+cd backend && python -m app.knowledge.ingest --calls 300        # validate, load SQL + search + graph + 300 synthetic call transcripts
+python -m app.knowledge.ingest --dry-run                         # report what would change; write nothing
+```
+The pipeline is **validated** (typed documents; a dangling graph reference stops it before anything is written), **idempotent** (run it twice and the second
+run changes nothing) and **self-healing** (wipe the search index and the next run rebuilds it from SQL). The staff console has a **Knowledge** tab: search with
+sources and graph facts, call insights, and a reload button.
+
+**Retrieval evaluation:** [docs/RETRIEVAL_EVAL.md](docs/RETRIEVAL_EVAL.md): 79 labelled English / Urdu / Roman Urdu queries, BM25 vs Elasticsearch (four Urdu analyzers) vs
+dense vs hybrid, with confidence intervals, a keyboard-variant robustness test, and an honest list of what it does not prove.
+
+## Agent brain (optional)
+
+`BRAIN=agent` swaps the rules engine for a **LangGraph** agent (`backend/app/agent`). An LLM plans and phrases; deterministic code owns everything that matters:
+
+- an **emergency guard** runs before the model sees the message, with the same matcher as the rules engine (a parity test checks both agree);
+- **identity gate**: appointment tools refuse until the caller is verified, and the model never learns which detail failed;
+- **propose, then confirm**: `propose_*` tools write nothing; `confirm_pending` works only if the proposal is from an *earlier* turn and the caller's latest
+  message is a clear yes, checked in code, not trusted from the model;
+- a **step cap** hands runaway loops to staff; if the model is down, **the rules engine answers that turn**;
+- every tool call is in the decision trace shown in the staff console.
+
+```bash
+BRAIN=agent LLM_PROVIDER=groq LLM_MODEL=<model-name> LLM_API_KEY=...   # also: openai, ollama (no key); one OpenAI-compatible client covers all three
+python -m eval.agent_eval --brain both --provider groq --model <model-name> --limit 20     # outcome-based comparison on the golden scenarios
+```
+The agent is tested end to end with a scripted model (including attempts to bypass every gate), but **it has not been evaluated against a live LLM**: no
+agent-vs-rules numbers are published until `eval.agent_eval` has been run with a real key.
 
 ## Known limits
 

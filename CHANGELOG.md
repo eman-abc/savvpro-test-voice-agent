@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0
+- **Knowledge layer:** typed bilingual documents built from the YAML; search over my own BM25, Elasticsearch (four Urdu analyzer variants), dense embeddings and
+  hybrid fusion, with automatic fallback; a Neo4j knowledge graph with an in-memory twin (parity tested); GraphRAG-style answers with sources.
+- **Ingestion pipeline:** validated, idempotent, self-healing, deletions propagate; `--dry-run`; synthetic call transcripts; staff **Knowledge** tab.
+- **Retrieval evaluation:** 79 labelled queries, bootstrap intervals, a keyboard-variant robustness test (`docs/RETRIEVAL_EVAL.md`).
+- **LangGraph agent brain** (`BRAIN=agent`): emergency guard, identity gate, propose-then-confirm, step cap, rules-engine fallback; agent-vs-rules harness (not yet run live).
+- **Safety fix:** the emergency matcher missed real phrasings in English and Urdu; now a shared proximity matcher used by both brains.
+- Tests: 630+ (real-service integration tests behind `-m integration`), 66 golden scenarios, 18 browser tests. CI gains an integration job.
+
 ## 1.3.0
 - **WhatsApp channel** (Meta Cloud API): signed webhook, chat over the same brain in English and Urdu, voice notes, reminders and waitlist
   offers with the 24-hour rule, delivery receipts, optional allowed-number list, demo number linking, staff channel panel.

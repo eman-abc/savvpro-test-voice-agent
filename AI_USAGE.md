@@ -71,6 +71,22 @@ or reviewing translations), never at run time.
 | `strftime("%-d")` in the demo-patient hints: valid on Linux, a crash on Windows. Every test passed in my Linux sandbox and CI | You ran the suite on Windows and 8 tests failed | Portable formatting, plus a test that scans the code for platform-specific format codes. **Lesson: I only ever ran things on Linux.** |
 | Voice-note and speech code was written against Meta's and Deepgram's documented formats from memory | Cannot be verified here | Tested against fakes that record every request; **needs a first run with real accounts** |
 
+## Round 5 (knowledge layer, graph, agent): mistakes and honest gaps
+
+| Mistake | How it was found | Fix |
+|---|---|---|
+| The emergency matcher missed real phrasings ("pain in my chest", "he is not breathing", Urdu with an adjective in the middle), **in the original rules engine too** | Writing an Urdu emergency test for the agent failed, and the failing reply came from the rules engine | Shared proximity matcher, more keywords, an Urdu list, 36 phrasing tests, a parity test and a mutation check |
+| New ingestion tests mutated a cached rules object and silently broke unrelated tests | They passed alone and failed in the full run | Each test gets a private deep copy |
+| Installing LangChain's client pulled in `httpx2`, which changed Starlette's test client; an old cookie test depended on cookie ordering | The test failed in the original repo too | The test no longer depends on ordering |
+| `numpy` was used but not declared | A clean virtualenv install | Declared in the requirements |
+| Three of my tests passed for the wrong reasons (an `or True`, a loose fallback, a `raise` inside `pytest.raises`) and a later assertion leaned on operator precedence | Re-reading them, then breaking the code to see if they failed | Rewritten; mutation checks |
+| Patch scripts aborted halfway after the linter reformatted their targets, again | Odd test behaviour | Rewrite whole functions by name instead of matching exact text |
+| The dense model collapsed on Urdu typed with Arabic letters (0.63 to 0.32) and the hybrids inherited it | The robustness probe I added to the evaluation | Fold Urdu letters before embedding |
+| I assumed Elasticsearch deletes indices by wildcard, and that a handoff call contains the word "person" | Integration fixture errors; a failing test | Delete by name; search for text from a real call |
+| I claimed "the model is never called" for a scenario where it legitimately handles the first turn | A failing test | The claim is now about the emergency turn |
+| An ambiguous Playwright selector ("Load" also matched "Reload") | Playwright's strict mode | Exact match |
+| **Not fixed, only flagged:** the agent has never run against a live LLM; the Docker-based CI job and docker-compose were never run; Python 3.14 compatibility of the new dependencies is untested | n/a | Stated in the README and DESIGN |
+
 ## Review and verification done by a human
 
 *(Fill this in with what you personally reviewed, changed, or tested.)*
