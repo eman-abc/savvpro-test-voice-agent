@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field
 class TurnIn(BaseModel):
     text: str = Field(default="", max_length=500)
     seq: int | None = Field(default=None, ge=0, description="turns the client has seen; makes retries idempotent")
+    asr_confidence: float | None = Field(
+        default=None, ge=0, le=1, description="speech-recognition confidence, if the text came from speech"
+    )
 
 
 class StartIn(BaseModel):
@@ -40,3 +43,7 @@ class ReplyIn(BaseModel):
 
 class RunRemindersIn(BaseModel):
     hours: int = Field(default=24, ge=1, le=24 * 30)
+
+
+class PhoneIn(BaseModel):
+    phone: str = Field(max_length=30)

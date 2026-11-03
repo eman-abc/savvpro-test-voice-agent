@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 import uuid
 from datetime import timedelta
 
@@ -15,34 +14,13 @@ from sqlalchemy.orm import Session
 from app import models as m
 from app.api.deps import AppContext, client_ip, get_ctx, get_db, get_service
 from app.api.schemas import StartIn, TurnIn, TurnOut
-from app.brain.dialog import Brain, TurnResult
+from app.brain.dialog import TurnResult
 from app.brain.state import PROGRESS_STEPS, STEP_TO_PROGRESS, DialogState
 from app.services.clinic import ClinicService
+from app.turns import brain_for, persist, run_turn
 
 router = APIRouter(prefix="/api/calls", tags=["calls"])
 log = logging.getLogger("calls")
-
-
-def _persist(db: Session, call: m.CallSession, user_text: str | None, r: TurnResult, st: DialogState) -> None:
-    r.trace["appointment"] = r.appointment  # kept so a retried request can be answered identically
-    call.state_json = st.to_json()
-    call.last_activity_at = m.utcnow()
-    call.turn_count += 1
-    call.patient_id = st.patient_id
-    db.add(
-        m.CallTurn(
-            call_id=call.id,
-            idx=call.turn_count - 1,
-            user_text=user_text,
-            reply_text=r.reply,
-            trace_json=json.dumps(r.trace),
-        )
-    )
-    if r.ended:
-        call.ended_at = m.utcnow()
-        call.outcome = st.outcome()
-        call.handoff_summary = st.handoff_summary
-    db.commit()
 
 
 def _replay(call: m.CallSession) -> TurnOut:
@@ -62,17 +40,6 @@ def _replay(call: m.CallSession) -> TurnOut:
     )
 
 
-def _brain(svc: ClinicService, ctx: AppContext, call_id: str) -> Brain:
-    s = ctx.settings
-    return Brain(
-        svc,
-        ctx.faq,
-        actor=f"voice:{call_id[:8]}",
-        lock_failures=s.verify_lock_failures,
-        lock_minutes=s.verify_lock_minutes,
-    )
-
-
 def _out(call_id: str, r: TurnResult, st: DialogState) -> TurnOut:
     return TurnOut(
         call_id=call_id,
@@ -84,18 +51,6 @@ def _out(call_id: str, r: TurnResult, st: DialogState) -> TurnOut:
         outcome=st.outcome() if r.ended else None,
         appointment=r.appointment,
     )
-
-
-def _observe(ctx: AppContext, r: TurnResult, st: DialogState, seconds: float) -> None:
-    intent = r.trace.get("intent") or {}
-    ctx.metrics.inc(
-        "voice_turns_total", {"intent": intent.get("name", "none"), "decision": intent.get("decision", "none")}
-    )
-    ctx.metrics.observe("voice_turn_seconds", seconds)
-    if any(s["label"] == "Not understood" for s in r.trace["steps"]):
-        ctx.metrics.inc("voice_misses_total")
-    if r.ended:
-        ctx.metrics.inc("voice_calls_ended_total", {"outcome": st.outcome()})
 
 
 @router.post("", response_model=TurnOut, status_code=201)
@@ -112,11 +67,11 @@ def start_call(
     st = DialogState()
     if body and body.lang == "ur":
         st.lang, st.lang_locked = "ur", True
-    r = _brain(svc, ctx, call_id).start(st)
+    r = brain_for(svc, ctx, call_id).start(st)
     call = m.CallSession(id=call_id)
     db.add(call)
     db.flush()
-    _persist(db, call, None, r, st)
+    persist(db, call, None, r, st)
     log.info("call started", extra={"call_id": call_id})
     return _out(call_id, r, st)
 
@@ -151,18 +106,7 @@ def take_turn(
         call.ended_at, call.outcome = now, "timeout"
         db.commit()
         raise HTTPException(410, "This call timed out. Please start a new one.")
-    st = DialogState.from_json(call.state_json)
-    brain = _brain(svc, ctx, call_id)
-    started = time.perf_counter()
-    if call.turn_count >= ctx.settings.call_max_turns:
-        st.end_reason, st.ended, st.step = "limit", True, "ENDED"
-        r = brain._finish(
-            "We've reached the length limit for this call. Please call back or visit us in person. Goodbye.", "ENDED"
-        )
-    else:
-        r = brain.handle(st, body.text)
-    _persist(db, call, body.text, r, st)
-    _observe(ctx, r, st, time.perf_counter() - started)
+    r, st = run_turn(db, svc, ctx, call, body.text, body.asr_confidence)
     log.info("turn", extra={"call_id": call_id})
     return _out(call_id, r, st)
 

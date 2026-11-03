@@ -151,7 +151,7 @@ def run_scenario(rules: ClinicRules, sc: dict[str, Any]) -> ScenarioResult:
         failures: list[str] = []
         checks = hits = 0
         for i, step in enumerate(sc["steps"], 1):
-            r = brain.handle(st, step["say"])
+            r = brain.handle(st, step["say"], step.get("asr"))
             problems, c, h = _check(step.get("expect", {}), r, st)
             checks, hits = checks + c, hits + h
             transcript.append(StepResult(step["say"], r.reply, not problems, problems))
