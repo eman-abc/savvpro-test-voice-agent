@@ -49,6 +49,7 @@ class DialogState:
     lang: str = "en"  # en | ur : the language replies are spoken in
     ur_names: dict[str, str] = field(default_factory=dict)  # transliterated name -> how the caller said it in Urdu
     lang_locked: bool = False  # True when the caller picked it explicitly (UI toggle)
+    agent: dict[str, Any] = field(default_factory=dict)  # the LLM agent's conversation memory (text only)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))

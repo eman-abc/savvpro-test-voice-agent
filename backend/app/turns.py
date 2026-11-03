@@ -14,6 +14,7 @@ from app.brain.state import DialogState
 from app.services.clinic import ClinicService
 
 if TYPE_CHECKING:  # avoids a circular import with app.api.deps
+    from app.agent.brain import AgentBrain
     from app.api.deps import AppContext
 
 
@@ -39,9 +40,10 @@ def persist(db: Session, call: m.CallSession, user_text: str | None, r: TurnResu
     db.commit()
 
 
-def brain_for(svc: ClinicService, ctx: AppContext, call_id: str) -> Brain:
+def brain_for(svc: ClinicService, ctx: AppContext, call_id: str) -> Brain | AgentBrain:
+    """The rules engine by default; the LLM agent when BRAIN=agent and a model is configured (it keeps the rules engine as its fallback)."""
     s = ctx.settings
-    return Brain(
+    rules_brain = Brain(
         svc,
         ctx.faq,
         actor=f"voice:{call_id[:8]}",
@@ -49,6 +51,20 @@ def brain_for(svc: ClinicService, ctx: AppContext, call_id: str) -> Brain:
         lock_minutes=s.verify_lock_minutes,
         asr_min=s.asr_min_confidence,
     )
+    if s.brain == "agent" and ctx.llm is not None and ctx.knowledge is not None:
+        from app.agent.brain import AgentBrain
+
+        return AgentBrain(
+            svc,
+            ctx.knowledge,
+            ctx.llm,
+            f"agent:{call_id[:8]}",
+            rules_brain,
+            s.agent_max_steps,
+            s.verify_lock_failures,
+            s.verify_lock_minutes,
+        )
+    return rules_brain
 
 
 def observe(ctx: AppContext, r: TurnResult, st: DialogState, seconds: float) -> None:
